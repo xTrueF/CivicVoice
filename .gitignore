@@ -1,0 +1,23 @@
+# Build output
+bin/
+obj/
+dist/
+
+# Node
+node_modules/
+npm-debug.log
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# CS2 mod output (local only)
+C:/Users/
+
+# Environment
+.env
+.DS_Store
+Thumbs.db
