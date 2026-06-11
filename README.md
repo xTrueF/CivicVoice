@@ -9,10 +9,10 @@ Civic Voice is a roleplay and immersion mod. It reads your city's real data to g
 ## Features
 
 ###  Urgent Issues
-Triggered automatically when city metrics fall below certain levels. High unemployment, housing shortage, budget deficit - Citizens will demand action. Proposals are driven by live city data so they always feel relevant to your current situation.
+Triggered automatically when city metrics fall below certain levels. High unemployment, housing shortage, budget deficit then citizens will demand action. Proposals are driven by live city data so they always feel relevant to your current situation.
 
 ###  Citizen Proposals
-General improvements your citizens want to see, influenced by whoever is currently in office. The mayor's specialty nudges which proposals come forward — an Environment mayor brings more green space proposals, a Healthcare mayor pushes for clinics and hospitals.
+General improvements your citizens want to see, influenced by whoever is currently in office. The mayor's specialty nudges which proposals come forward e.g. an Environment mayor brings more green space proposals, a Healthcare mayor pushes for clinics and hospitals.
 
 ### Major Projects
 Ambitious year-long undertakings that define your city's future. A new port, a university campus, a signature landmark. Major projects require your approval and are marked complete manually when you've built them in game.
