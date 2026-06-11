@@ -1,0 +1,12 @@
+{
+  "FileVersion": 2,
+  "Version": "0.1.0",
+  "Id": "civicvoice",
+  "DisplayName": "Civic Voice",
+  "ShortDescription": "Bring democracy to your city! Citizens propose projects, vote on initiatives and elect a mayor.",
+  "Description": "Civic Voice adds a living governance layer to your city. Citizens submit proposals based on real city data, vote in annual mayoral elections and hold you accountable for the state of your city.\n\nThree tiers of proposals: Urgent Issues triggered by live city metrics, Citizen Proposals influenced by the current mayor, and Major Projects like ports and universities.\n\nThis is a roleplay and immersion mod. It reads your city's real data but does not directly modify gameplay mechanics.\n\nSafe to add or remove from any city at any time.",
+  "Author": "Tfact",
+  "Tags": ["Gameplay", "UI"],
+  "ChangeLog": "0.1.0 - Initial beta release",
+  "Dependencies": []
+}
