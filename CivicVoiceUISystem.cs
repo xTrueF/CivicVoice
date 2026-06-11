@@ -19,7 +19,6 @@ namespace CivicVoice.UI
         private ValueBinding<string> _notificationBinding;
         private ValueBinding<int> _votingPopulationBinding;
         private ValueBinding<int> _nextElectionDaysBinding;
-        private ValueBinding<int> _electionDaysLeftBinding;
 
         private RawValueBinding _proposedBinding;
         private RawValueBinding _activeBinding;
@@ -40,7 +39,6 @@ namespace CivicVoice.UI
             AddBinding(_notificationBinding = new ValueBinding<string>("civicvoice", "notification", ""));
             AddBinding(_nextElectionDaysBinding = new ValueBinding<int>("civicvoice", "nextElectionDays", 0));
             AddBinding(_votingPopulationBinding = new ValueBinding<int>("civicvoice", "votingPopulation", 0));
-            AddBinding(_electionDaysLeftBinding = new ValueBinding<int>("civicvoice", "electionDaysLeft", 0));
 
             AddBinding(_proposedBinding = new RawValueBinding("civicvoice", "proposed", WriteProposed));
             AddBinding(_activeBinding = new RawValueBinding("civicvoice", "active", WriteActive));
@@ -98,7 +96,6 @@ namespace CivicVoice.UI
             {
                 _nextElectionDaysBinding.Update(-1);
             }
-
         }
 
         // ── JSON writers ──────────────────────────────────────────────────
@@ -111,8 +108,7 @@ namespace CivicVoice.UI
                 writer.TypeBegin("CivicProject");
                 writer.PropertyName("id"); writer.Write(p.Id);
                 writer.PropertyName("title"); writer.Write(p.Title);
-                string liveDescription = _civicSystem.GetLiveDescription(p);
-                writer.PropertyName("description"); writer.Write(liveDescription);
+                writer.PropertyName("description"); writer.Write(_civicSystem.GetLiveDescription(p));
                 writer.PropertyName("category"); writer.Write(p.Category.ToString());
                 writer.PropertyName("type"); writer.Write(p.Type.ToString());
                 writer.PropertyName("tier"); writer.Write(p.Tier.ToString());
@@ -136,10 +132,7 @@ namespace CivicVoice.UI
                 {
                     DateTime now = _civicSystem.GetCurrentGameDate();
                     if (now != DateTime.MinValue)
-                    {
-                        int daysPassed = (int)(now - p.StartDate).TotalDays;
-                        daysLeft = Math.Max(0, p.DeadlineGameDays - daysPassed);
-                    }
+                        daysLeft = Math.Max(0, p.DeadlineGameDays - (int)(now - p.StartDate).TotalDays);
                 }
 
                 float progressPct = p.ManualCompletion
@@ -164,22 +157,21 @@ namespace CivicVoice.UI
 
         private void WriteElection(IJsonWriter writer)
         {
+            void WriteEmpty()
+            {
+                writer.TypeBegin("Election");
+                writer.PropertyName("isActive"); writer.Write(false);
+                writer.PropertyName("hasVoted"); writer.Write(false);
+                writer.PropertyName("winner"); writer.Write("");
+                writer.PropertyName("progress"); writer.Write(0f);
+                writer.PropertyName("candidates"); writer.ArrayBegin(0); writer.ArrayEnd();
+                writer.TypeEnd();
+            }
+
             try
             {
                 var e = _civicSystem?.Data?.CurrentElection;
-                if (e == null)
-                {
-                    writer.TypeBegin("Election");
-                    writer.PropertyName("isActive"); writer.Write(false);
-                    writer.PropertyName("hasVoted"); writer.Write(false);
-                    writer.PropertyName("winner"); writer.Write("");
-                    writer.PropertyName("progress"); writer.Write(0f);
-                    writer.PropertyName("candidates");
-                    writer.ArrayBegin(0);
-                    writer.ArrayEnd();
-                    writer.TypeEnd();
-                    return;
-                }
+                if (e == null) { WriteEmpty(); return; }
 
                 float electionProgress = 0f;
                 if (e.IsActive && _civicSystem.Data.ElectionStartDate != DateTime.MinValue)
@@ -201,7 +193,6 @@ namespace CivicVoice.UI
                 writer.ArrayBegin(e.Candidates.Count);
                 foreach (var c in e.Candidates)
                 {
-                    float voteShare = totalVotes > 0 ? (float)c.Votes / totalVotes * 100f : 0f;
                     writer.TypeBegin("Candidate");
                     writer.PropertyName("name"); writer.Write(c.Name);
                     writer.PropertyName("age"); writer.Write(c.Age);
@@ -209,24 +200,13 @@ namespace CivicVoice.UI
                     writer.PropertyName("specialty"); writer.Write(c.Specialty.ToString());
                     writer.PropertyName("slogan"); writer.Write(c.Slogan);
                     writer.PropertyName("votes"); writer.Write(c.Votes);
-                    writer.PropertyName("voteShare"); writer.Write(voteShare);
+                    writer.PropertyName("voteShare"); writer.Write(totalVotes > 0 ? (float)c.Votes / totalVotes * 100f : 0f);
                     writer.TypeEnd();
                 }
                 writer.ArrayEnd();
                 writer.TypeEnd();
             }
-            catch
-            {
-                writer.TypeBegin("Election");
-                writer.PropertyName("isActive"); writer.Write(false);
-                writer.PropertyName("hasVoted"); writer.Write(false);
-                writer.PropertyName("winner"); writer.Write("");
-                writer.PropertyName("progress"); writer.Write(0f);
-                writer.PropertyName("candidates");
-                writer.ArrayBegin(0);
-                writer.ArrayEnd();
-                writer.TypeEnd();
-            }
+            catch { WriteEmpty(); }
         }
 
         // ── Trigger handlers ──────────────────────────────────────────────
