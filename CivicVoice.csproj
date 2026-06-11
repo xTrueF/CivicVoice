@@ -81,6 +81,9 @@
 		<Copy
 			SourceFiles="$(MSBuildProjectDirectory)\UI\dist\civicvoice.js"
 			DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
+		<Copy
+			SourceFiles="$(MSBuildProjectDirectory)\CivicVoiceUI\src\ballot.svg"
+			DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
 	</Target>
 
 </Project>
