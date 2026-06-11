@@ -1,4 +1,9 @@
-﻿using CivicVoice.Systems;
+﻿// ============================================================
+// CivicVoice — Democracy & Governance Mod for Cities: Skylines II
+// Created by xTrueF | github.com/xTrueF/CivicVoice
+// Licensed under MIT License
+// ============================================================
+using CivicVoice.Systems;
 using Colossal.UI.Binding;
 using Game.UI;
 using System;

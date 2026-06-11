@@ -1,3 +1,8 @@
+// ============================================================
+// CivicVoice — Democracy & Governance Mod for Cities: Skylines II
+// Created by xTrueF | github.com/xTrueF/CivicVoice
+// Licensed under MIT License
+// ============================================================
 import { bindValue, useValue, trigger } from "cs2/api";
 import { Scrollable } from "cs2/ui";
 import { useState } from "react";

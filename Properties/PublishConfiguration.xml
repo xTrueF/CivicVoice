@@ -2,36 +2,50 @@
 	<!--Id must be set in order to update existed mod. it is not required for publishing mod for the first time-->
 	<ModId Value="" />
 	<!--Name of the mod to display to players-->
-	<DisplayName Value="CivicVoice" />
+	<DisplayName Value="Civic Voice" />
 	<!--Short description of the mod-->
-	<ShortDescription Value="This is a short description" />
+	<ShortDescription Value="Bring democracy to your city! Citizens propose projects, vote on initiatives and elect a mayor whose agenda shapes the city." />
 	<!--Long description of the mod. Single line or multi line. Supports minimal markdown subset-->
-	<!--LongDescription Value="This is a long description" /-->
 	<LongDescription>
-This is a long description
+		Civic Voice adds a living governance layer to your city. Citizens submit proposals based on your city's real needs, vote in annual mayoral elections and hold you accountable for the state of your city.
+
+		**Citizen Proposals**
+		Citizens submit proposals based on your city's real needs. High unemployment? Residents demand job creation. Housing shortage? Citizens call for new development. Proposals are driven by live city data so they always feel relevant to your current situation.
+
+		**Three Tiers of Projects**
+		- Urgent Issues — triggered automatically when city metrics fall below acceptable levels
+		- Citizen Proposals — general improvements influenced by the current mayor's specialty
+		- Major Projects — ambitious year-long undertakings like a new port, university campus or signature landmark
+
+		**Mayoral Elections**
+		Every year your city holds a democratic election. Two candidates campaign with distinct specialties and slogans. Endorse your preferred candidate to add your influence — but the citizens decide. The winning mayor's specialty influences which proposals citizens bring forward.
+
+		**Note**
+		Civic Voice is a roleplay and immersion mod. It reads your city's real data to generate meaningful proposals and elections but does not directly modify gameplay mechanics.
+
+		Safe to add or remove from any city at any time. Does not conflict with other mods.
 	</LongDescription>
 	<!--Thumbnail-->
 	<Thumbnail Value="Properties/Thumbnail.png" />
 	<!--Screenshot, can be set multiple times-->
 	<Screenshot Value="" />
 	<!--Tag, can be set multiple times-->
-	<Tag Value="" />
+	<Tag Value="Gameplay" />
+	<Tag Value="UI" />
 	<!--Link to the forum post where the mod can be discussed-->
 	<ForumLink Value="" />
 	<!--Version of the mod-->
-	<ModVersion Value="1.0" />
+	<ModVersion Value="0.1.0" />
 	<!--Recommended version of the base game to use the mod-->
-	<GameVersion Value="1.0.*" />
+	<GameVersion Value="1.2.*" />
 	<!--Dependency for the mod, can be set multiple times-->
 	<Dependency Id="" />
-	<!--Required DLC, can be set multiple times. Supported values are "Landmark Buildings", "San Fransisco Set", "Beach Properties", "Urban Promenades", "Modern Architecture"-->
+	<!--Required DLC, can be set multiple times-->
 	<RequiredDLC Value="" />
-	<!--Change log for new version. Single line or multi line. Supports minimal markdown subset-->
-	<ChangeLog Value="" />
-	<!--<ChangeLog>
-	</ChangeLog>-->
-	<!--External link, can be set multiple times. supported types are "discord", "github", "youtube", "twitch", "x", "paypal", "patreon", "buymeacoffee", "kofi", "crowdin", "gitlab", "gofundme"-->
-	<ExternalLink Type="" Url="" />
+	<!--Change log for new version-->
+	<ChangeLog Value="0.1.0 - Initial beta release" />
+	<!--External link-->
+	<ExternalLink Type="github" Url="https://github.com/xTrueF/CivicVoice" />
 	<!--Supported values Public, Private, Unlisted-->
 	<AccessLevel Value="Public" />
 </Publish>
