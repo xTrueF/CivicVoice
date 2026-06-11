@@ -18,10 +18,10 @@ General improvements your citizens want to see, influenced by whoever is current
 Ambitious year-long undertakings that define your city's future. A new port, a university campus, a signature landmark. Major projects require your approval and are marked complete manually when you've built them in game.
 
 ### Mayoral Elections
-Every year your city holds a democratic election. Two candidates campaign with distinct specialties, party affiliations and slogans. Endorse your preferred candidate to add your influence — but the citizens decide. The winning mayor's specialty influences which proposals citizens bring forward.
+Every year your city holds a democratic election. Two candidates campaign with distinct specialties, party affiliations and slogans. Endorse your preferred candidate to add your influence but the citizens decide. The winning mayor's specialty influences which proposals citizens bring forward.
 
 ### Live City Data
-All proposals and descriptions update in real time based on your city's actual metrics — population, unemployment, happiness, housing demand, crime rate, budget and more.
+All proposals and descriptions update in real time based on your city's actual metrics: population, unemployment, happiness, housing demand, crime rate, budget and more.
 
 ## Installation
 
@@ -45,11 +45,11 @@ The mod reads live game data every tick to trigger proposals when city metrics f
 
 Proposals are organised into three tiers:
 
-**Urgent Issues** — triggered automatically by live city data such as high unemployment, housing shortages or a budget deficit. Up to 3 can be active at once.
+**Urgent Issues**: triggered automatically by live city data such as high unemployment, housing shortages or a budget deficit. Up to 3 can be active at once.
 
-**Citizen Proposals** — general improvements influenced by the current mayor's specialty. Up to 2 can be active at once.
+**Citizen Proposals**: general improvements influenced by the current mayor's specialty. Up to 2 can be active at once.
 
-**Major Projects** — ambitious year-long undertakings like a new port or university campus. Marked complete manually when built in game. Up to 2 can be active at once.
+**Major Projects**: ambitious year-long undertakings like a new port or university campus. Marked complete manually when built in game. Up to 2 can be active at once.
 
 ## Contributing
 
@@ -62,7 +62,7 @@ Ideas for future versions:
 
 ## License
 
-MIT License — see [LICENSE](LICENSE) for details.
+MIT License: see [LICENSE](LICENSE) for details.
 
 ## Credits
 
