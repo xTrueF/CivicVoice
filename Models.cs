@@ -79,6 +79,8 @@ namespace CivicVoice.Models
 
         public string GetProgressText()
         {
+            if (Tier == ProjectTier.AdHoc)
+                return "In progress";
             if (ManualCompletion)
                 return MarkedComplete ? "Marked as complete" : "In progress — mark complete when done";
             return GoalType switch

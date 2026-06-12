@@ -3,6 +3,7 @@
 // Created by xTrueF | github.com/xTrueF/CivicVoice
 // Licensed under MIT License
 // ============================================================
+using CivicVoice.Models;
 using CivicVoice.Systems;
 using Colossal.UI.Binding;
 using Game.UI;
@@ -14,6 +15,7 @@ namespace CivicVoice.UI
     {
         private CivicVoiceSystem _civicSystem;
 
+        private ValueBinding<bool> _useUniversalModMenuBinding;
         private ValueBinding<int> _populationBinding;
         private ValueBinding<float> _happinessBinding;
         private ValueBinding<float> _unemploymentBinding;
@@ -34,6 +36,7 @@ namespace CivicVoice.UI
             base.OnCreate();
             _civicSystem = World.GetOrCreateSystemManaged<CivicVoiceSystem>();
 
+            AddBinding(_useUniversalModMenuBinding = new ValueBinding<bool>("civicvoice", "useUniversalModMenu", Mod.Settings?.UseUniversalModMenu ?? false));
             AddBinding(_populationBinding = new ValueBinding<int>("civicvoice", "population", 0));
             AddBinding(_happinessBinding = new ValueBinding<float>("civicvoice", "happiness", 50f));
             AddBinding(_unemploymentBinding = new ValueBinding<float>("civicvoice", "unemployment", 5f));
@@ -54,6 +57,7 @@ namespace CivicVoice.UI
             AddBinding(new TriggerBinding<string>("civicvoice", "castVote", CastVote));
             AddBinding(new TriggerBinding<string>("civicvoice", "abandonProject", AbandonProject));
             AddBinding(new TriggerBinding<string>("civicvoice", "markProjectComplete", MarkProjectComplete));
+            AddBinding(new TriggerBinding("civicvoice", "forceElection", ForceElection));
 
             _proposedBinding.Update();
             _activeBinding.Update();
@@ -66,6 +70,7 @@ namespace CivicVoice.UI
         {
             if (_civicSystem == null) return;
 
+            _useUniversalModMenuBinding.Update(Mod.Settings?.UseUniversalModMenu ?? false);
             _populationBinding.Update(_civicSystem.Population);
             _happinessBinding.Update(_civicSystem.Happiness);
             _unemploymentBinding.Update(_civicSystem.Unemployment);
@@ -100,6 +105,11 @@ namespace CivicVoice.UI
             else
             {
                 _nextElectionDaysBinding.Update(-1);
+            }
+            if (Mod.ForceElectionRequested)
+            {
+                Mod.ForceElectionRequested = false;
+                _civicSystem.TriggerForceElection();
             }
         }
 
@@ -140,9 +150,13 @@ namespace CivicVoice.UI
                         daysLeft = Math.Max(0, p.DeadlineGameDays - (int)(now - p.StartDate).TotalDays);
                 }
 
-                float progressPct = p.ManualCompletion
-                    ? (p.MarkedComplete ? 100f : 50f)
-                    : (p.GoalTarget > 0 ? Math.Min(100f, p.CurrentValue / p.GoalTarget * 100f) : 0f);
+                bool isBelowGoal = p.Tier == ProjectTier.MetricTriggered || p.Title.Contains("shopping") || p.Title.Contains("suburb");
+                float progressPct = p.ManualCompletion ? (p.MarkedComplete ? 100f : 50f)
+                    : (p.GoalTarget > 0
+                        ? (isBelowGoal
+                            ? Math.Min(100f, Math.Max(0f, (1f - (p.CurrentValue / p.GoalTarget - 1f)) * 100f))
+                            : Math.Min(100f, p.CurrentValue / p.GoalTarget * 100f))
+                        : 0f);
 
                 writer.TypeBegin("ActiveProject");
                 writer.PropertyName("id"); writer.Write(p.Id);
@@ -215,11 +229,11 @@ namespace CivicVoice.UI
         }
 
         // ── Trigger handlers ──────────────────────────────────────────────
-
         private void AcceptProject(string id) => _civicSystem.AcceptProject(id);
         private void RejectProject(string id) => _civicSystem.RejectProject(id);
         private void CastVote(string name) => _civicSystem.CastVote(name);
         private void AbandonProject(string id) => _civicSystem.AbandonProject(id);
         private void MarkProjectComplete(string id) => _civicSystem.MarkProjectComplete(id);
+        private void ForceElection() => _civicSystem.TriggerForceElection();
     }
 }
