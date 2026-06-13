@@ -6,16 +6,20 @@
 - Current mayor specialty and slogan shown in Election tab when no election is running
 - Notification history — last 3 notifications with fading opacity, collapsible with Recent Activity heading
 - Collapsible sections for proposal tiers and active project tiers, state persists when switching tabs
-- Project count shown in each collapsible section header
-- Project count shown in Proposals and Active tabs
+- Project count shown in each collapsible section header and in Proposals and Active tabs
 - Active projects now show tier and category pills matching proposal card style
 - Eligible voter count now uses real age data (teens + adults + seniors) instead of flat 88% estimate
 
 ### Changed
 - Active project cards now match proposal card visual style
 - Endorse button changed from solid blue to outline style for consistency
-- Active Projects tab shortened to Active to give count more room
+- Hover states added to all buttons, tabs, collapsible section headers and Recent Activity header
+- Button spacing improved
+- Active Projects tab shortened to Active
 - Notification history replaces single notification bar
+
+### Fixed
+- Notifications disappearing to quickly
 
 ## [0.2.0] - 2026-06-12
 ### Added
