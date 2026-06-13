@@ -8,6 +8,7 @@ using CivicVoice.Systems;
 using Colossal.UI.Binding;
 using Game.UI;
 using System;
+using System.Collections.Generic;
 
 namespace CivicVoice.UI
 {
@@ -23,13 +24,19 @@ namespace CivicVoice.UI
         private ValueBinding<int> _availableSlotsBinding;
         private ValueBinding<bool> _hasElectionBinding;
         private ValueBinding<string> _mayorNameBinding;
-        private ValueBinding<string> _notificationBinding;
         private ValueBinding<int> _votingPopulationBinding;
         private ValueBinding<int> _nextElectionDaysBinding;
+        private ValueBinding<int> _completedProjectsBinding;
+        private ValueBinding<int> _failedProjectsBinding;
+        private ValueBinding<string> _mayorSpecialtyBinding;
+        private ValueBinding<string> _mayorSloganBinding;
 
         private RawValueBinding _proposedBinding;
         private RawValueBinding _activeBinding;
         private RawValueBinding _electionBinding;
+        private RawValueBinding _notificationsBinding;
+        private List<string> _notificationHistory = new List<string>();
+        private DateTime _lastNotificationTime = DateTime.MinValue;
 
         protected override void OnCreate()
         {
@@ -44,13 +51,17 @@ namespace CivicVoice.UI
             AddBinding(_availableSlotsBinding = new ValueBinding<int>("civicvoice", "availableSlots", 7));
             AddBinding(_hasElectionBinding = new ValueBinding<bool>("civicvoice", "hasElection", false));
             AddBinding(_mayorNameBinding = new ValueBinding<string>("civicvoice", "mayorName", "None"));
-            AddBinding(_notificationBinding = new ValueBinding<string>("civicvoice", "notification", ""));
             AddBinding(_nextElectionDaysBinding = new ValueBinding<int>("civicvoice", "nextElectionDays", 0));
             AddBinding(_votingPopulationBinding = new ValueBinding<int>("civicvoice", "votingPopulation", 0));
+            AddBinding(_completedProjectsBinding = new ValueBinding<int>("civicvoice", "totalCompleted", 0));
+            AddBinding(_failedProjectsBinding = new ValueBinding<int>("civicvoice", "totalFailed", 0));
+            AddBinding(_mayorSpecialtyBinding = new ValueBinding<string>("civicvoice", "mayorSpecialty", ""));
+            AddBinding(_mayorSloganBinding = new ValueBinding<string>("civicvoice", "mayorSlogan", ""));
 
             AddBinding(_proposedBinding = new RawValueBinding("civicvoice", "proposed", WriteProposed));
             AddBinding(_activeBinding = new RawValueBinding("civicvoice", "active", WriteActive));
             AddBinding(_electionBinding = new RawValueBinding("civicvoice", "election", WriteElection));
+            AddBinding(_notificationsBinding = new RawValueBinding("civicvoice", "notifications", WriteNotifications));
 
             AddBinding(new TriggerBinding<string>("civicvoice", "acceptProject", AcceptProject));
             AddBinding(new TriggerBinding<string>("civicvoice", "rejectProject", RejectProject));
@@ -79,15 +90,22 @@ namespace CivicVoice.UI
             _hasElectionBinding.Update(_civicSystem.HasActiveElection);
             _mayorNameBinding.Update(_civicSystem.Data.CurrentMayor?.Name ?? "None");
             _votingPopulationBinding.Update((int)(_civicSystem.Population * 0.88f));
+            _completedProjectsBinding.Update(_civicSystem.Data.TotalProjectsCompleted);
+            _failedProjectsBinding.Update(_civicSystem.Data.TotalProjectsFailed);
+            _mayorSpecialtyBinding.Update(_civicSystem.Data.CurrentMayor?.Specialty.ToString() ?? "");
+            _mayorSloganBinding.Update(_civicSystem.Data.CurrentMayor?.Slogan ?? "");
 
             if (_civicSystem.Notifications.Count > 0)
             {
-                _notificationBinding.Update(_civicSystem.Notifications[0]);
-                _civicSystem.Notifications.RemoveAt(0);
-            }
-            else
-            {
-                _notificationBinding.Update("");
+                while (_civicSystem.Notifications.Count > 0)
+                {
+                    _notificationHistory.Insert(0, _civicSystem.Notifications[0]);
+                    _civicSystem.Notifications.RemoveAt(0);
+                    if (_notificationHistory.Count > 3)
+                        _notificationHistory.RemoveAt(3);
+                }
+                _lastNotificationTime = DateTime.UtcNow;
+                _notificationsBinding.Update();
             }
 
             _proposedBinding.Update();
@@ -226,6 +244,13 @@ namespace CivicVoice.UI
                 writer.TypeEnd();
             }
             catch { WriteEmpty(); }
+        }
+        private void WriteNotifications(IJsonWriter writer)
+        {
+            writer.ArrayBegin(_notificationHistory.Count);
+            foreach (var n in _notificationHistory)
+                writer.Write(n);
+            writer.ArrayEnd();
         }
 
         // ── Trigger handlers ──────────────────────────────────────────────

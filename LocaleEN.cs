@@ -76,6 +76,10 @@ namespace CivicVoice
 
                 { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.RejectedCooldownMonths)), "Rejected Proposal Cooldown (months)" },
                 { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.RejectedCooldownMonths)), "Months before a rejected proposal can reappear." },
+
+                { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.ResetToDefaults)), "Reset to Defaults" },
+                { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.ResetToDefaults)), "Reset all Civic Voice settings to their default values." },
+                { _settings.GetOptionWarningLocaleID(nameof(CivicVoiceSettings.ResetToDefaults)), "Reset all settings to defaults?" },
             };
         }
 

@@ -8,12 +8,16 @@ const unemployment$ = bindValue<number>("civicvoice", "unemployment", 5);
 const usedSlots$ = bindValue<number>("civicvoice", "usedSlots", 0);
 const hasElection$ = bindValue<boolean>("civicvoice", "hasElection", false);
 const mayorName$ = bindValue<string>("civicvoice", "mayorName", "None");
-const notification$ = bindValue<string>("civicvoice", "notification", "");
+const notifications$ = bindValue<string[]>("civicvoice", "notifications", []);
 const proposed$ = bindValue<any[]>("civicvoice", "proposed", []);
 const active$ = bindValue<any[]>("civicvoice", "active", []);
 const election$ = bindValue<any>("civicvoice", "election", null);
 const votingPopulation$ = bindValue<number>("civicvoice", "votingPopulation", 0);
 const nextElectionDays$ = bindValue<number>("civicvoice", "nextElectionDays", 0);
+const totalCompleted$ = bindValue<number>("civicvoice", "totalCompleted", 0);
+const totalFailed$ = bindValue<number>("civicvoice", "totalFailed", 0);
+const mayorSpecialty$ = bindValue<string>("civicvoice", "mayorSpecialty", "");
+const mayorSlogan$ = bindValue<string>("civicvoice", "mayorSlogan", "");
 
 const C = {
     titleBar: "rgba(8,11,18,0.95)",
@@ -82,26 +86,35 @@ function ProgressBar({ pct, color }: { pct: number; color: string }) {
     );
 }
 
-function Tabs({ active, onSelect, hasElection, proposed }: { active: string; onSelect: (t: string) => void; hasElection: boolean; proposed: any[] }) {
+function Tabs({ active, onSelect, hasElection, proposed, activeProjects }: { active: string; onSelect: (t: string) => void; hasElection: boolean; proposed: any[]; activeProjects: any[] }) {
+    const [hoveredTab, setHoveredTab] = useState<string | null>(null);
     const tabs = ["proposals", "active", "election", "stats"];
     return (
         <div style={{ display: "flex", flexDirection: "row", background: C.metaBar, borderBottom: `1rem solid ${C.border}` }}>
             {tabs.map(t => (
-                <div key={t} onClick={() => onSelect(t)} style={{
-                    flex: 1, padding: "9rem 4rem", textAlign: "center", cursor: "pointer",
-                    fontSize: "12rem",
-                    color: active === t ? C.cyan : C.muted,
-                    borderBottom: active === t ? `2rem solid ${C.cyan}` : "2rem solid transparent",
-                    fontWeight: active === t ? 600 : 400,
-                    letterSpacing: "0.3px",
-                }}>
-                    {t === "proposals" && <div style={{ display: "flex", flexDirection: "row", justifyContent: "center", alignItems: "center" }}>
-                        PROPOSALS{proposed?.length > 0 ? <div style={{ color: C.red, marginLeft: "3rem" }}>●</div> : null}
-                    </div>}
-                    {t === "active" && "ACTIVE PROJECTS"}
-                    {t === "election" && <div style={{ display: "flex", flexDirection: "row", justifyContent: "center", alignItems: "center" }}>
-                        ELECTION{hasElection ? <div style={{ color: C.red, marginLeft: "3rem" }}>●</div> : null}
-                    </div>}
+                <div key={t}
+                    onClick={() => onSelect(t)}
+                    onMouseEnter={() => setHoveredTab(t)}
+                    onMouseLeave={() => setHoveredTab(null)}
+                    style={{
+                        flex: 1, padding: "9rem 4rem", textAlign: "center", cursor: "pointer",
+                        fontSize: "12rem",
+                        color: active === t ? C.cyan : hoveredTab === t ? "#e8eaf0" : C.muted,
+                        borderBottom: active === t ? `2rem solid ${C.cyan}` : "2rem solid transparent",
+                        fontWeight: active === t ? 600 : 400,
+                        letterSpacing: "0.3px",
+                        background: hoveredTab === t && active !== t ? "rgba(255,255,255,0.05)" : "transparent",
+                        display: "flex", justifyContent: "center", alignItems: "center", gap: "3rem",
+                    }}>
+                    {t === "proposals" && <>
+                        PROPOSALS{proposed?.length > 0 ? <span style={{ color: C.red, fontWeight: 700, marginLeft: "4rem" }}>({proposed.length})</span> : null}
+                    </>}
+                    {t === "active" && <>
+                        ACTIVE{activeProjects?.length > 0 ? <span style={{ color: C.cyan, fontWeight: 700, marginLeft: "4rem" }}>({activeProjects.length})</span> : null}
+                    </>}
+                    {t === "election" && <>
+                        ELECTION{hasElection ? <span style={{ color: C.red, marginLeft: "3rem" }}>●</span> : null}
+                    </>}
                     {t === "stats" && "CITY STATS"}
                 </div>
             ))}
@@ -113,6 +126,31 @@ function SectionLabel({ label, color }: { label: string; color: string }) {
     return (
         <div style={{ fontSize: "13rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", padding: "10rem 14rem 5rem", color }}>
             {label}
+        </div>
+    );
+}
+
+function CvButton({ color, onClick, children }: { color: "cyan" | "red"; onClick: () => void; children: any }) {
+    const [hovered, setHovered] = useState(false);
+    const c = color === "cyan" ? "75,195,212" : "224,96,96";
+    const tc = color === "cyan" ? C.cyan : C.red;
+    return (
+        <div
+            onClick={onClick}
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
+            style={{
+                padding: "4rem 16rem",
+                borderRadius: "4rem",
+                border: `1rem solid rgba(${c},${hovered ? "0.8" : "0.5"})`,
+                background: hovered ? `rgba(${c},0.75)` : `rgba(${c},0.28)`,
+                color: hovered ? "#fff" : tc,
+                fontSize: "14rem",
+                fontWeight: 600,
+                cursor: "pointer",
+                marginLeft: "8rem",
+            }}>
+            {children}
         </div>
     );
 }
@@ -143,15 +181,36 @@ function ProposalCard({ p, onAccept, onReject }: { p: any; onAccept: () => void;
                     <div style={{ height: "4rem", width: `${Math.min(Math.max(p.voteShare || 0, 0), 100)}%`, borderRadius: "2rem", background: C.green }} />
                 </div>
             </div>
-            <div style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "6rem", padding: "7rem 12rem", background: "rgba(0,0,0,0.12)", borderTop: "1rem solid rgba(255,255,255,0.04)" }}>
-                <div onClick={onReject} style={{ padding: "4rem 12rem", borderRadius: "4rem", border: "1rem solid rgba(224,96,96,0.4)", color: C.red, fontSize: "14rem", fontWeight: 600, cursor: "pointer" }}>Reject</div>
-                <div onClick={onAccept} style={{ padding: "4rem 12rem", borderRadius: "4rem", border: "1rem solid rgba(75,195,212,0.4)", color: C.cyan, fontSize: "14rem", fontWeight: 600, cursor: "pointer" }}>Accept</div>
+            <div style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "24rem", padding: "7rem 12rem", background: "rgba(0,0,0,0.12)", borderTop: "1rem solid rgba(255,255,255,0.04)" }}>
+                <CvButton color="red" onClick={onReject}>Reject</CvButton>
+                <CvButton color="cyan" onClick={onAccept}>Accept</CvButton>
             </div>
         </div>
     );
 }
 
-function ProposalsTab({ proposed }: { proposed: any[] }) {
+function CollapsibleSection({ label, color, children, count, open, onToggle }: { label: string; color: string; children: any; count: number; open: boolean; onToggle: () => void }) {
+    const [hovered, setHovered] = useState(false);
+    return (
+        <div>
+            <div
+                onClick={onToggle}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
+                style={{
+                    display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center",
+                    padding: "10rem 14rem 5rem", cursor: "pointer",
+                    background: hovered ? "rgba(255,255,255,0.04)" : "transparent"
+                }}>
+                <div style={{ fontSize: "13rem", fontWeight: 700, letterSpacing: "1px", textTransform: "uppercase", color, display: "flex", flexDirection: "row", alignItems: "center", gap: "6rem" }}>{label} <span style={{ fontSize: "13rem", fontWeight: 700, color: color }}>({count})</span></div>
+                <span style={{ fontSize: "11rem", color }}>{open ? "▲" : "▼"}</span>
+            </div>
+            {open && children}
+        </div>
+    );
+}
+
+function ProposalsTab({ proposed, metricOpen, setMetricOpen, adhocOpen, setAdhocOpen, majorOpen, setMajorOpen }: { proposed: any[]; metricOpen: boolean; setMetricOpen: (v: boolean) => void; adhocOpen: boolean; setAdhocOpen: (v: boolean) => void; majorOpen: boolean; setMajorOpen: (v: boolean) => void }) {
     if (!proposed?.length)
         return <div style={{ color: C.muted, textAlign: "center", padding: "16rem", fontSize: "16rem" }}>No proposals yet. Check back soon.</div>;
 
@@ -161,24 +220,21 @@ function ProposalsTab({ proposed }: { proposed: any[] }) {
 
     return (
         <div>
-            {metric.length > 0 && <>
-                <SectionLabel label="Urgent issues" color={C.red} />
+            {metric.length > 0 && <CollapsibleSection label="Urgent issues" color={C.red} count={metric.length} open={metricOpen} onToggle={() => setMetricOpen(!metricOpen)}>
                 {metric.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} />)}
-            </>}
-            {adhoc.length > 0 && <>
-                <SectionLabel label="Citizen proposals" color={C.cyan} />
+            </CollapsibleSection>}
+            {adhoc.length > 0 && <CollapsibleSection label="Citizen proposals" color={C.cyan} count={adhoc.length} open={adhocOpen} onToggle={() => setAdhocOpen(!adhocOpen)}>
                 {adhoc.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} />)}
-            </>}
-            {major.length > 0 && <>
-                <SectionLabel label="Major projects" color={C.purple} />
+            </CollapsibleSection>}
+            {major.length > 0 && <CollapsibleSection label="Major projects" color={C.purple} count={major.length} open={majorOpen} onToggle={() => setMajorOpen(!majorOpen)}>
                 {major.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} />)}
-            </>}
+            </CollapsibleSection>}
             <div style={{ height: "8rem" }} />
         </div>
     );
 }
 
-function ActiveTab({ active }: { active: any[] }) {
+function ActiveTab({ active, metricOpen, setMetricOpen, adhocOpen, setAdhocOpen, majorOpen, setMajorOpen }: { active: any[]; metricOpen: boolean; setMetricOpen: (v: boolean) => void; adhocOpen: boolean; setAdhocOpen: (v: boolean) => void; majorOpen: boolean; setMajorOpen: (v: boolean) => void }) {
     if (!active?.length)
         return <div style={{ color: C.muted, textAlign: "center", padding: "16rem", fontSize: "16rem" }}>No active projects. Accept proposals from the Proposals tab.</div>;
 
@@ -189,30 +245,29 @@ function ActiveTab({ active }: { active: any[] }) {
     const renderActive = (p: any) => {
         const urgent = p.daysLeft < 2 && !p.manualCompletion;
         const tc = tierColor(p.tier);
+        const cc = categoryColor(p.category);
         const accent = p.isComplete ? C.green : urgent ? C.red : tc;
         const timeText = p.isComplete ? "Complete!" : `${p.daysLeft}mo left`;
         return (
             <div key={p.id} style={{ margin: "0 10rem 6rem", background: C.card, borderRadius: "6rem", borderLeft: `3rem solid ${accent}`, overflow: "hidden" }}>
-                <div style={{ padding: "10rem 12rem" }}>
-                    <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", marginBottom: "4rem" }}>
-                        <div style={{ fontSize: "18rem", fontWeight: 600, color: C.text }}>{p.isComplete ? "✓ " : ""}{p.title}</div>
-                        <div style={{ fontSize: "14rem", color: urgent ? C.red : C.muted }}>{timeText}</div>
+                <div style={{ padding: "10rem 12rem 10rem 14rem" }}>
+                    <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: "6rem" }}>
+                        <div style={{ display: "flex", flexDirection: "row" }}>
+                            <Pill label={tierLabel(p.tier)} color={tc} />
+                            <Pill label={splitCamel(p.category)} color={cc} />
+                        </div>
+                        <div style={{ fontSize: "14rem", color: urgent ? C.red : C.muted, marginLeft: "8rem" }}>{timeText}</div>
                     </div>
-                    <div style={{ fontSize: "14rem", color: C.muted2, marginBottom: "5rem" }}>{p.progress}</div>
+                    <div style={{ fontSize: "18rem", fontWeight: 600, color: C.text, marginBottom: "4rem", lineHeight: 1.3 }}>{p.isComplete ? "✓ " : ""}{p.title}</div>
+                    <div style={{ fontSize: "14rem", color: C.muted2, lineHeight: 1.5, marginBottom: "8rem" }}>{p.progress}</div>
                     <ProgressBar pct={p.progressPct} color={accent} />
                 </div>
-                <div style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "6rem", padding: "7rem 12rem", background: "rgba(0,0,0,0.12)", borderTop: "1rem solid rgba(255,255,255,0.04)" }}>
+                <div style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "24rem", padding: "7rem 12rem", background: "rgba(0,0,0,0.12)", borderTop: "1rem solid rgba(255,255,255,0.04)" }}>
                     {p.manualCompletion && !p.markedComplete && (
-                        <div onClick={() => trigger("civicvoice", "markProjectComplete", p.id)}
-                            style={{ padding: "4rem 12rem", borderRadius: "4rem", border: "1rem solid rgba(75,195,212,0.4)", color: C.cyan, fontSize: "14rem", fontWeight: 600, cursor: "pointer" }}>
-                            Mark complete
-                        </div>
+                        <CvButton color="cyan" onClick={() => trigger("civicvoice", "markProjectComplete", p.id)}>Mark complete</CvButton>
                     )}
                     {!p.isComplete && (
-                        <div onClick={() => trigger("civicvoice", "abandonProject", p.id)}
-                            style={{ padding: "4rem 12rem", borderRadius: "4rem", border: "1rem solid rgba(224,96,96,0.4)", color: C.red, fontSize: "14rem", fontWeight: 600, cursor: "pointer" }}>
-                            Abandon
-                        </div>
+                        <CvButton color="red" onClick={() => trigger("civicvoice", "abandonProject", p.id)}>Abandon</CvButton>
                     )}
                 </div>
             </div>
@@ -221,15 +276,22 @@ function ActiveTab({ active }: { active: any[] }) {
 
     return (
         <div>
-            {metric.length > 0 && <><SectionLabel label="Urgent" color={C.red} />{metric.map(renderActive)}</>}
-            {adhoc.length > 0 && <><SectionLabel label="In progress" color={C.cyan} />{adhoc.map(renderActive)}</>}
-            {major.length > 0 && <><SectionLabel label="Major projects" color={C.purple} />{major.map(renderActive)}</>}
+            {metric.length > 0 && <CollapsibleSection label="Urgent" color={C.red} count={metric.length} open={metricOpen} onToggle={() => setMetricOpen(!metricOpen)}>
+                {metric.map(renderActive)}
+            </CollapsibleSection>}
+            {adhoc.length > 0 && <CollapsibleSection label="In progress" color={C.cyan} count={adhoc.length} open={adhocOpen} onToggle={() => setAdhocOpen(!adhocOpen)}>
+                {adhoc.map(renderActive)}
+            </CollapsibleSection>}
+            {major.length > 0 && <CollapsibleSection label="Major projects" color={C.purple} count={major.length} open={majorOpen} onToggle={() => setMajorOpen(!majorOpen)}>
+                {major.map(renderActive)}
+            </CollapsibleSection>}
             <div style={{ height: "8rem" }} />
         </div>
     );
 }
 
-function ElectionTab({ election, mayorName }: { election: any; mayorName: string }) {
+
+function ElectionTab({ election, mayorName, mayorSpecialty, mayorSlogan }: { election: any; mayorName: string; mayorSpecialty: string; mayorSlogan: string }) {
     if (!election?.isActive)
         return (
             <div style={{ padding: "0 10rem" }}>
@@ -237,6 +299,8 @@ function ElectionTab({ election, mayorName }: { election: any; mayorName: string
                     <div style={{ background: C.card, border: `1rem solid ${C.border}`, borderRadius: "6rem", padding: "10rem 12rem", margin: "10rem 0 6rem" }}>
                         <div style={{ fontSize: "13rem", color: C.muted, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4rem" }}>Current mayor</div>
                         <div style={{ fontWeight: 600, fontSize: "18rem", color: C.text }}>{mayorName}</div>
+                        {mayorSpecialty && <Pill label={splitCamel(mayorSpecialty)} color={categoryColor(mayorSpecialty)} />}
+                        {mayorSlogan && <div style={{ fontSize: "13rem", fontStyle: "italic", color: C.muted2, marginTop: "6rem" }}>{`"${mayorSlogan}"`}</div>}
                     </div>
                 )}
                 <div style={{ color: C.muted, textAlign: "center", padding: "16rem", fontSize: "16rem" }}>No election currently. Elections are held every year.</div>
@@ -273,10 +337,7 @@ function ElectionTab({ election, mayorName }: { election: any; mayorName: string
                             <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
                                 <div style={{ fontSize: "14rem", color: C.muted2 }}>{votesText}</div>
                                 {!election.hasVoted && (
-                                    <div onClick={() => trigger("civicvoice", "castVote", c.name)}
-                                        style={{ padding: "5rem 14rem", borderRadius: "4rem", background: C.cyan, color: "#fff", fontSize: "14rem", fontWeight: 600, cursor: "pointer", border: "1rem solid rgba(255,255,255,0.2)" }}>
-                                        {endorseText}
-                                    </div>
+                                    <CvButton color="cyan" onClick={() => trigger("civicvoice", "castVote", c.name)}>{endorseText}</CvButton>
                                 )}
                             </div>
                         </div>
@@ -288,7 +349,7 @@ function ElectionTab({ election, mayorName }: { election: any; mayorName: string
     );
 }
 
-function StatsTab({ population, happiness, unemployment, votingPopulation }: { population: number; happiness: number; unemployment: number; votingPopulation: number }) {
+function StatsTab({ population, happiness, unemployment, votingPopulation, totalCompleted, totalFailed }: { population: number; happiness: number; unemployment: number; votingPopulation: number; totalCompleted: number; totalFailed: number }) {
     function StatRow({ label, value, color }: { label: string; value: string; color?: string }) {
         return (
             <div style={{ display: "flex", flexDirection: "row", justifyContent: "space-between", padding: "6rem 0", borderBottom: "1rem solid rgba(255,255,255,0.04)" }}>
@@ -304,12 +365,44 @@ function StatsTab({ population, happiness, unemployment, votingPopulation }: { p
             <StatRow label="Happiness" value={`${happiness?.toFixed(1)}%`} color={happiness > 70 ? C.green : happiness > 50 ? C.amber : C.red} />
             <StatRow label="Unemployment" value={`${unemployment?.toFixed(1)}%`} color={unemployment < 5 ? C.green : unemployment < 10 ? C.amber : C.red} />
             <StatRow label="Eligible voters" value={votingPopulation?.toLocaleString()} />
+            <StatRow label="Projects completed" value={totalCompleted?.toString()} color={C.green} />
+            <StatRow label="Projects failed" value={totalFailed?.toString()} color={totalFailed > 0 ? C.red : C.text} />
+        </div>
+    );
+}
+function NotificationHistory({ notifications }: { notifications: string[] }) {
+    const [hovered, setHovered] = useState(false);
+    const [expanded, setExpanded] = useState(true);
+    return (
+        <div style={{ borderLeft: `3rem solid ${C.cyan}`, background: "rgba(75,195,212,0.06)" }}>
+            <div
+                onClick={() => setExpanded(v => !v)}
+                onMouseEnter={() => setHovered(true)}
+                onMouseLeave={() => setHovered(false)}
+                style={{
+                    padding: "6rem 14rem", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer",
+                    background: hovered ? "rgba(75,195,212,0.1)" : "transparent"
+                }}>
+                <span style={{ fontSize: "14rem", color: C.cyan, textTransform: "uppercase", letterSpacing: "1px", fontWeight: 600 }}>Recent activity</span>
+                <span style={{ fontSize: "14rem", color: C.cyan }}>{expanded ? "▲" : "▼"}</span>
+            </div>
+            {expanded && notifications.map((n, i) => (
+                <div key={i} style={{ opacity: i === 0 ? 1 : i === 1 ? 0.5 : 0.2, padding: "5rem 14rem", borderTop: `1rem solid rgba(255,255,255,0.06)`, fontSize: "13rem", color: C.text }}>
+                    {n}
+                </div>
+            ))}
         </div>
     );
 }
 
 export const CivicVoicePanel = () => {
     const [tab, setTab] = useState("proposals");
+    const [proposalMetricOpen, setProposalMetricOpen] = useState(true);
+    const [proposalAdhocOpen, setProposalAdhocOpen] = useState(true);
+    const [proposalMajorOpen, setProposalMajorOpen] = useState(true);
+    const [activeMetricOpen, setActiveMetricOpen] = useState(true);
+    const [activeAdhocOpen, setActiveAdhocOpen] = useState(true);
+    const [activeMajorOpen, setActiveMajorOpen] = useState(true);
 
     const population = useValue(population$);
     const happiness = useValue(happiness$);
@@ -317,12 +410,16 @@ export const CivicVoicePanel = () => {
     const usedSlots = useValue(usedSlots$);
     const hasElection = useValue(hasElection$);
     const mayorName = useValue(mayorName$);
-    const notification = useValue(notification$);
+    const notifications = useValue(notifications$);
     const proposed = useValue(proposed$);
     const active = useValue(active$);
     const election = useValue(election$);
     const votingPopulation = useValue(votingPopulation$);
     const nextElectionDays = useValue(nextElectionDays$);
+    const totalCompleted = useValue(totalCompleted$);
+    const totalFailed = useValue(totalFailed$);
+    const mayorSpecialty = useValue(mayorSpecialty$);
+    const mayorSlogan = useValue(mayorSlogan$);
 
     return (
         <div style={{
@@ -349,24 +446,20 @@ export const CivicVoicePanel = () => {
                 <div>Next election: <span style={{ color: C.cyan, fontWeight: 600 }}>{nextElectionDays >= 0 ? `${nextElectionDays}mo` : "TBD"}</span></div>
                 <div>Active: <span style={{ color: C.cyan, fontWeight: 600 }}>{usedSlots} / 7</span></div>
             </div>
-            {notification && (
-                <div style={{ background: "rgba(75,195,212,0.06)", borderLeft: `3rem solid ${C.cyan}`, padding: "7rem 14rem", fontSize: "14rem", color: C.text }}>
-                    {notification}
-                </div>
-            )}
+            {notifications?.length > 0 && <NotificationHistory notifications={notifications} />}
             {hasElection && tab !== "election" && (
                 <div onClick={() => setTab("election")} style={{ background: "rgba(255,203,0,0.06)", borderLeft: `3rem solid ${C.amber}`, padding: "7rem 14rem", fontSize: "14rem", color: C.amber, cursor: "pointer", display: "flex", flexDirection: "row", alignItems: "center" }}>
                     <div style={{ width: "6rem", height: "6rem", borderRadius: "50%", background: C.amber, marginRight: "6rem" }} />
                     Election underway — tap to view candidates
                 </div>
             )}
-            <Tabs active={tab} onSelect={setTab} hasElection={hasElection} proposed={proposed} />
+            <Tabs active={tab} onSelect={setTab} hasElection={hasElection} proposed={proposed} activeProjects={active} />
             <div style={{ background: C.body }}>
                 <Scrollable style={{ maxHeight: "460rem" }}>
-                    {tab === "proposals" && <ProposalsTab proposed={proposed} />}
-                    {tab === "active" && <ActiveTab active={active} />}
-                    {tab === "election" && <ElectionTab election={election} mayorName={mayorName} />}
-                    {tab === "stats" && <StatsTab population={population} happiness={happiness} unemployment={unemployment} votingPopulation={votingPopulation} />}
+                    {tab === "proposals" && <ProposalsTab proposed={proposed} metricOpen={proposalMetricOpen} setMetricOpen={setProposalMetricOpen} adhocOpen={proposalAdhocOpen} setAdhocOpen={setProposalAdhocOpen} majorOpen={proposalMajorOpen} setMajorOpen={setProposalMajorOpen} />}
+                    {tab === "active" && <ActiveTab active={active} metricOpen={activeMetricOpen} setMetricOpen={setActiveMetricOpen} adhocOpen={activeAdhocOpen} setAdhocOpen={setActiveAdhocOpen} majorOpen={activeMajorOpen} setMajorOpen={setActiveMajorOpen} />}
+                    {tab === "election" && <ElectionTab election={election} mayorName={mayorName} mayorSpecialty={mayorSpecialty} mayorSlogan={mayorSlogan} />}
+                    {tab === "stats" && <StatsTab population={population} happiness={happiness} unemployment={unemployment} votingPopulation={votingPopulation} totalCompleted={totalCompleted} totalFailed={totalFailed} />}
                 </Scrollable>
             </div>
             <div style={{ background: C.footer, padding: "8rem 14rem", borderTop: `1rem solid ${C.border}`, display: "flex", flexDirection: "row", justifyContent: "space-between", fontSize: "13rem", color: C.muted }}>

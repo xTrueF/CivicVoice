@@ -100,6 +100,15 @@ namespace CivicVoice
         [SettingsUISlider(min = 1, max = 24, step = 1)]
         public int RejectedCooldownMonths { get; set; } = 6;
 
+        [SettingsUISection(kSection, kGeneralGroup)]
+        [SettingsUIButton]
+        [SettingsUIConfirmation]
+        public bool ResetToDefaults
+        {
+            get => false;
+            set { if (value) SetDefaults(); }
+        }
+
         public override void SetDefaults()
         {
             UseUniversalModMenu = false;

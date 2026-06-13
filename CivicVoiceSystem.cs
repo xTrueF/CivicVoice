@@ -75,6 +75,9 @@ namespace CivicVoice.Systems
         public float Happiness { get; private set; } = 50f;
         public int Population { get; private set; } = 0;
         public float Unemployment { get; private set; } = 5f;
+        public int TeenCount { get; private set; } = 0;
+        public int AdultCount { get; private set; } = 0;
+        public int SeniorCount { get; private set; } = 0;
         public int HomelessCount { get; private set; } = 0;
         public float Health { get; private set; } = 50f;
         public float Wellbeing { get; private set; } = 50f;
@@ -141,6 +144,9 @@ namespace CivicVoice.Systems
                 Unemployment = cs.UnemploymentRate;
                 Happiness = cs.AverageCitizenHappiness;
                 HomelessCount = cs.HomelessHouseholdCount;
+                TeenCount = cs.TeenCount;
+                AdultCount = cs.AdultCount;
+                SeniorCount = cs.SeniorCount;
             }
             catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (household): {ex.Message}"); }
 
@@ -535,7 +541,7 @@ namespace CivicVoice.Systems
         // ── Vote assignment ───────────────────────────────────────────────
         private void DoAssignVotes(CivicProject p)
         {
-            int eligibleVoters = Math.Max(100, (int)(Population * 0.88f));
+            int eligibleVoters = Math.Max(100, TeenCount + AdultCount + SeniorCount);
             float forShare = Math.Max(0.40f, Math.Min(0.90f, 0.55f + DoGetUrgency(p) * 0.30f + (float)(_rng.NextDouble() - 0.5) * 0.1f));
             int totalStartVotes = p.Tier == ProjectTier.Major
                 ? Math.Max(10, (int)(eligibleVoters * 0.4f))
@@ -546,7 +552,7 @@ namespace CivicVoice.Systems
 
         private void DoFluctuateProposalVotes()
         {
-            int eligible = Math.Max(10, (int)(Population * 0.88f));
+            int eligible = Math.Max(10, TeenCount + AdultCount + SeniorCount);
             foreach (var p in Data.ProposedProjects)
             {
                 if (p.VotesAgainst > p.VotesFor * 1.5f)
@@ -650,6 +656,7 @@ namespace CivicVoice.Systems
                     DateTime now = _timeSystem.GetCurrentDateTime();
                     Data.MetricProjectCooldowns[key] = now.AddDays(cooldownDays);
                     CivicMod.log.Info($"[CivicVoice] Cooldown set for {key} until {now.AddDays(cooldownDays)}");
+                    DoNotify($"Proposal rejected: \"{p.Title}\".");
                 }
             }
         }
@@ -813,7 +820,7 @@ namespace CivicVoice.Systems
 
             if (Data.CurrentElection != null && Data.CurrentElection.IsActive)
             {
-                int eligible = Math.Max(10, (int)(Population * 0.88f));
+                int eligible = Math.Max(10, TeenCount + AdultCount + SeniorCount);
                 int totalVotes = Data.CurrentElection.Candidates.Sum(c => c.Votes);
                 if (totalVotes < eligible)
                     foreach (var c in Data.CurrentElection.Candidates)
@@ -901,7 +908,7 @@ namespace CivicVoice.Systems
             var candidate1 = DoMakeCandidate(allSpecialties[0]);
             var candidate2 = DoMakeCandidate(allSpecialties[1]);
 
-            int totalVoters = Math.Max(10, (int)(Population * 0.88f));
+            int totalVoters = Math.Max(10, TeenCount + AdultCount + SeniorCount);
             float share = 0.4f + (float)_rng.NextDouble() * 0.2f;
             candidate1.Votes = (int)(totalVoters * share);
             candidate2.Votes = totalVoters - candidate1.Votes;
