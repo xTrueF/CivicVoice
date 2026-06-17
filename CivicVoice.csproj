@@ -2,17 +2,21 @@
 
 	<PropertyGroup>
 		<Configurations>Debug;Release</Configurations>
-		<!--The file where mod information which is required for publishing mod on PDX mods are stored-->
-		<PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>
+		<!-->PublishConfigurationPath>Properties\PublishConfiguration.xml</PublishConfigurationPath>-->
 		<Nullable>enable</Nullable>
 		<GenerateAssemblyInfo>false</GenerateAssemblyInfo>
 	</PropertyGroup>
-	
-	<!--Imports must be after PropertyGroup block-->
+
 	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.props" />
 	<Import Project="$([System.Environment]::GetEnvironmentVariable('CSII_TOOLPATH', 'EnvironmentVariableTarget.User'))\Mod.targets" />
+
 	<Target Name="BuildCivicVoiceUI" AfterTargets="DeployWIP" Condition="Exists('$(ProjectDir)CivicVoiceUI\node_modules\.bin\webpack.cmd')">
 		<Exec WorkingDirectory="$(ProjectDir)CivicVoiceUI" Command="npm.cmd run build" />
+	</Target>
+
+	<Target Name="DeployLang" AfterTargets="DeployWIP">
+		<MakeDir Directories="$(DeployDir)\lang" />
+		<Copy SourceFiles="$(ProjectDir)lang\en-US.json" DestinationFolder="$(DeployDir)\lang\" />
 	</Target>
 
 	<ItemGroup>
@@ -78,16 +82,12 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
+		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	</ItemGroup>
 
 	<Target Name="CopyUI" AfterTargets="Build">
-		<Copy
-			SourceFiles="$(MSBuildProjectDirectory)\UI\dist\civicvoice.js"
-			DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
-		<Copy
-			SourceFiles="$(MSBuildProjectDirectory)\CivicVoiceUI\src\ballot.svg"
-			DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
+		<Copy SourceFiles="$(MSBuildProjectDirectory)\UI\dist\civicvoice.js" DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
+		<Copy SourceFiles="$(MSBuildProjectDirectory)\CivicVoiceUI\src\ballot.svg" DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
 	</Target>
 
 </Project>

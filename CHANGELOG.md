@@ -1,5 +1,28 @@
-## [0.2.1] - 2026-06-13
+## [0.3.0] - 2026-06-16
+### Added
+- Three-way elections with incumbent re-election, two-term limits and approval-weighted voting
+- Mayor aging and birthday system — mayors age in real time over their term
+- Mayor priority badges — gold star on proposals matching the current mayor's specialty
+- Toast notifications — slide-in popups when the panel is closed, colour coded by event type
+- Elections mod compatibility — CivicVoice elections disabled when Elections mod is detected, mayor data read from Elections mod
+- I18n Everywhere support
+- New and tweaked proposals across all tiers
+- Abandoned projects tracked separately from failed in city stats
+- City stats redesigned with collapsible City Overview and Project Overview sections
 
+### Changed
+- Health and crime now read real city data via game system reflection
+- Progress bars fixed for all goal types — above and below goals now calculate correctly
+- Cooldown date comparison fixed — proposals no longer get stuck when expiry date equals current date
+- Various UI improvements across the panel
+
+### Fixed
+- Metric proposal cooldown label showing raw binding key in settings
+- Healthcare proposal being immediately removed after triggering due to goal target being too low
+- Progress bar showing incorrectly for health and other above-threshold goals
+
+
+## [0.2.1] - 2026-06-13
 ### Added
 - Reset to defaults button in settings
 - Total projects completed and failed shown in City Stats tab

@@ -14,27 +14,37 @@ namespace CivicVoice.UI
 {
     public partial class CivicVoiceUISystem : UISystemBase
     {
-        private CivicVoiceSystem _civicSystem;
+        private CivicVoiceSystem _civicSystem = null!;
 
-        private ValueBinding<bool> _useUniversalModMenuBinding;
-        private ValueBinding<int> _populationBinding;
-        private ValueBinding<float> _happinessBinding;
-        private ValueBinding<float> _unemploymentBinding;
-        private ValueBinding<int> _usedSlotsBinding;
-        private ValueBinding<int> _availableSlotsBinding;
-        private ValueBinding<bool> _hasElectionBinding;
-        private ValueBinding<string> _mayorNameBinding;
-        private ValueBinding<int> _votingPopulationBinding;
-        private ValueBinding<int> _nextElectionDaysBinding;
-        private ValueBinding<int> _completedProjectsBinding;
-        private ValueBinding<int> _failedProjectsBinding;
-        private ValueBinding<string> _mayorSpecialtyBinding;
-        private ValueBinding<string> _mayorSloganBinding;
+        private ValueBinding<bool> _useUniversalModMenuBinding = null!;
+        private ValueBinding<int> _populationBinding = null!;
+        private ValueBinding<float> _happinessBinding = null!;
+        private ValueBinding<float> _unemploymentBinding = null!;
+        private ValueBinding<int> _usedSlotsBinding = null!;
+        private ValueBinding<int> _availableSlotsBinding = null!;
+        private ValueBinding<bool> _hasElectionBinding = null!;
+        private ValueBinding<string> _mayorNameBinding = null!;
+        private ValueBinding<int> _votingPopulationBinding = null!;
+        private ValueBinding<int> _nextElectionDaysBinding = null!;
+        private ValueBinding<int> _completedProjectsBinding = null!;
+        private ValueBinding<int> _failedProjectsBinding = null!;
+        private ValueBinding<string> _mayorSpecialtyBinding = null!;
+        private ValueBinding<string> _mayorSloganBinding = null!;
+        private ValueBinding<bool> _electionsModActiveBinding = null!;
+        private ValueBinding<int> _termCompletedBinding = null!;
+        private ValueBinding<int> _termFailedBinding = null!;
+        private ValueBinding<int> _mayorTermMonthsBinding = null!;
+        private ValueBinding<int> _mayorAgeBinding = null!;
+        private ValueBinding<int> _mayorTermsServedBinding = null!;
+        private ValueBinding<bool> _showNotificationsBinding = null!;
+        private ValueBinding<float> _healthBinding = null!;
+        private ValueBinding<float> _crimeRateBinding = null!;
+        private ValueBinding<int> _abandonedProjectsBinding = null!;
 
-        private RawValueBinding _proposedBinding;
-        private RawValueBinding _activeBinding;
-        private RawValueBinding _electionBinding;
-        private RawValueBinding _notificationsBinding;
+        private RawValueBinding _proposedBinding = null!;
+        private RawValueBinding _activeBinding = null!;
+        private RawValueBinding _electionBinding = null!;
+        private RawValueBinding _notificationsBinding = null!;
         private List<string> _notificationHistory = new List<string>();
         private DateTime _lastNotificationTime = DateTime.MinValue;
 
@@ -57,6 +67,16 @@ namespace CivicVoice.UI
             AddBinding(_failedProjectsBinding = new ValueBinding<int>("civicvoice", "totalFailed", 0));
             AddBinding(_mayorSpecialtyBinding = new ValueBinding<string>("civicvoice", "mayorSpecialty", ""));
             AddBinding(_mayorSloganBinding = new ValueBinding<string>("civicvoice", "mayorSlogan", ""));
+            AddBinding(_electionsModActiveBinding = new ValueBinding<bool>("civicvoice", "electionsModActive", false));
+            AddBinding(_termCompletedBinding = new ValueBinding<int>("civicvoice", "termCompleted", 0));
+            AddBinding(_termFailedBinding = new ValueBinding<int>("civicvoice", "termFailed", 0));
+            AddBinding(_mayorTermMonthsBinding = new ValueBinding<int>("civicvoice", "mayorTermMonths", 0));
+            AddBinding(_mayorAgeBinding = new ValueBinding<int>("civicvoice", "mayorAge", 0));
+            AddBinding(_mayorTermsServedBinding = new ValueBinding<int>("civicvoice", "mayorTermsServed", 0));
+            AddBinding(_showNotificationsBinding = new ValueBinding<bool>("civicvoice", "showNotifications", true));
+            AddBinding(_healthBinding = new ValueBinding<float>("civicvoice", "health", 0f));
+            AddBinding(_crimeRateBinding = new ValueBinding<float>("civicvoice", "crimeRate", 0f));
+            AddBinding(_abandonedProjectsBinding = new ValueBinding<int>("civicvoice", "totalAbandoned", 0));
 
             AddBinding(_proposedBinding = new RawValueBinding("civicvoice", "proposed", WriteProposed));
             AddBinding(_activeBinding = new RawValueBinding("civicvoice", "active", WriteActive));
@@ -94,6 +114,22 @@ namespace CivicVoice.UI
             _failedProjectsBinding.Update(_civicSystem.Data.TotalProjectsFailed);
             _mayorSpecialtyBinding.Update(_civicSystem.Data.CurrentMayor?.Specialty.ToString() ?? "");
             _mayorSloganBinding.Update(_civicSystem.Data.CurrentMayor?.Slogan ?? "");
+            _electionsModActiveBinding.Update(CivicVoiceSystem.ElectionsModActive);
+            _termCompletedBinding.Update(_civicSystem.Data.TermProjectsCompleted);
+            _termFailedBinding.Update(_civicSystem.Data.TermProjectsFailed);
+            _showNotificationsBinding.Update(Mod.Settings?.ShowNotifications ?? true);
+            _healthBinding.Update(_civicSystem.Health);
+            _crimeRateBinding.Update(_civicSystem.CrimeRate);
+            _abandonedProjectsBinding.Update(_civicSystem.Data.TotalProjectsAbandoned);
+
+            DateTime mayorElected = _civicSystem.Data.MayorElectedDate;
+            DateTime nowForTerm = _civicSystem.GetCurrentGameDate();
+            int termMonths = (mayorElected != DateTime.MinValue && nowForTerm != DateTime.MinValue)
+                ? (int)(nowForTerm - mayorElected).TotalDays
+                : 0;
+            _mayorTermMonthsBinding.Update(termMonths);
+            _mayorAgeBinding.Update(_civicSystem.Data.CurrentMayor?.Age ?? 0);
+            _mayorTermsServedBinding.Update((_civicSystem.Data.CurrentMayor?.TermsServed ?? 0) == 0 ? 1 : _civicSystem.Data.CurrentMayor!.TermsServed);
 
             if (_civicSystem.Notifications.Count > 0)
             {
@@ -101,8 +137,8 @@ namespace CivicVoice.UI
                 {
                     _notificationHistory.Insert(0, _civicSystem.Notifications[0]);
                     _civicSystem.Notifications.RemoveAt(0);
-                    if (_notificationHistory.Count > 3)
-                        _notificationHistory.RemoveAt(3);
+                    if (_notificationHistory.Count > 5)
+                        _notificationHistory.RemoveAt(5);
                 }
                 _lastNotificationTime = DateTime.UtcNow;
                 _notificationsBinding.Update();
@@ -128,6 +164,11 @@ namespace CivicVoice.UI
             {
                 Mod.ForceElectionRequested = false;
                 _civicSystem.TriggerForceElection();
+            }
+            if (Mod.ConcludeElectionRequested)
+            {
+                Mod.ConcludeElectionRequested = false;
+                _civicSystem.ConcludeElection();
             }
         }
 
@@ -168,13 +209,15 @@ namespace CivicVoice.UI
                         daysLeft = Math.Max(0, p.DeadlineGameDays - (int)(now - p.StartDate).TotalDays);
                 }
 
-                bool isBelowGoal = p.Tier == ProjectTier.MetricTriggered || p.Title.Contains("shopping") || p.Title.Contains("suburb");
-                float progressPct = p.ManualCompletion ? (p.MarkedComplete ? 100f : 50f)
-                    : (p.GoalTarget > 0
-                        ? (isBelowGoal
-                            ? Math.Min(100f, Math.Max(0f, (1f - (p.CurrentValue / p.GoalTarget - 1f)) * 100f))
-                            : Math.Min(100f, p.CurrentValue / p.GoalTarget * 100f))
-                        : 0f);
+                float progressPct;
+                if (p.ManualCompletion)
+                    progressPct = p.MarkedComplete ? 100f : 50f;
+                else if (p.GoalTarget <= 0f)
+                    progressPct = 0f;
+                else if (p.GoalType == MetricGoalType.HealthAbove || p.GoalType == MetricGoalType.WellbeingAbove || p.GoalType == MetricGoalType.HappinessAbove || p.GoalType == MetricGoalType.BudgetSurplus || p.GoalType == MetricGoalType.PopulationAbove)
+                    progressPct = Math.Min(100f, Math.Max(0f, p.CurrentValue / p.GoalTarget * 100f));
+                else
+                    progressPct = Math.Min(100f, Math.Max(0f, (1f - p.CurrentValue / p.GoalTarget) * 100f));
 
                 writer.TypeBegin("ActiveProject");
                 writer.PropertyName("id"); writer.Write(p.Id);
@@ -245,6 +288,7 @@ namespace CivicVoice.UI
             }
             catch { WriteEmpty(); }
         }
+
         private void WriteNotifications(IJsonWriter writer)
         {
             writer.ArrayBegin(_notificationHistory.Count);

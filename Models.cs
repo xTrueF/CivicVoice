@@ -5,6 +5,7 @@
 // ============================================================
 using System;
 using System.Collections.Generic;
+using static CivicVoice.Models.CivicProject;
 
 namespace CivicVoice.Models
 {
@@ -25,7 +26,7 @@ namespace CivicVoice.Models
 
     public enum MetricGoalType
     {
-        UnemploymentBelow, HappinessAbove, PopulationAbove,
+        None, UnemploymentBelow, HappinessAbove, PopulationAbove,
         CrimeRateBelow, BudgetSurplus, HomelessBelow,
         HealthAbove, WellbeingAbove,
         CommercialDemandBelow,
@@ -117,6 +118,9 @@ namespace CivicVoice.Models
         public string PartyName { get; set; } = string.Empty;
         public string Slogan { get; set; } = string.Empty;
         public int Votes { get; set; }
+        public int TermsServed { get; set; } = 0;
+        public int BirthdayMonth { get; set; } = 1;
+        public int BirthdayDay { get; set; } = 1;
         public float VoteSharePercent(int totalVotes) =>
             totalVotes == 0 ? 0f : (float)Votes / totalVotes * 100f;
     }
@@ -152,5 +156,10 @@ namespace CivicVoice.Models
         public DateTime LastMajorProjectDate { get; set; } = DateTime.MinValue;
         public DateTime LastVoteFluctuationDate { get; set; } = DateTime.MinValue;
         public Dictionary<string, DateTime> MetricProjectCooldowns { get; set; } = new();
+        public int TermProjectsCompleted { get; set; } = 0;
+        public int TermProjectsFailed { get; set; } = 0;
+        public int TotalProjectsAbandoned { get; set; } = 0;
+        public DateTime MayorElectedDate { get; set; } = DateTime.MinValue;
+        public DateTime LastAgeCheckDate { get; set; } = DateTime.MinValue;
     }
 }

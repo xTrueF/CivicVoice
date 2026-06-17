@@ -3,16 +3,18 @@
 // Created by xTrueF | github.com/xTrueF/CivicVoice
 // Licensed under MIT License
 // ============================================================
-using CivicMod = CivicVoice.Mod;
 using CivicVoice.Models;
 using Colossal.Serialization.Entities;
 using Game;
 using Game.City;
+using Game.UI.InGame;
 using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Entities;
+using static CivicVoice.Models.CivicProject;
+using CivicMod = CivicVoice.Mod;
 
 namespace CivicVoice.Systems
 {
@@ -64,6 +66,8 @@ namespace CivicVoice.Systems
         private bool _loaded = false;
         private bool _forceElection = false;
         private static readonly Random _rng = new Random();
+        public static bool ElectionsModActive { get; private set; } = false;
+        private bool _electionsModChecked = false;
 
         public Game.Simulation.TimeSystem? _timeSystem;
         private Game.Simulation.CityStatisticsSystem? _statsSystem;
@@ -81,15 +85,17 @@ namespace CivicVoice.Systems
         public int HomelessCount { get; private set; } = 0;
         public float Health { get; private set; } = 50f;
         public float Wellbeing { get; private set; } = 50f;
-        public int CrimeRate { get; private set; } = 0;
+        public float CrimeRate { get; private set; } = 0f;
         public float Income { get; private set; } = 0f;
         public float Expense { get; private set; } = 0f;
         public float LowDensityDemand { get; private set; } = 0f;
         public float MedDensityDemand { get; private set; } = 0f;
         public float HighDensityDemand { get; private set; } = 0f;
         public float CommercialDemand { get; private set; } = 0f;
-        public float GarbageProcessingRate { get; private set; } = 0f;
-        public int GarbageCapacity { get; private set; } = 0;
+        public int UniversityCapacity { get; private set; } = 0;
+        public int UniversityStudents { get; private set; } = 0;
+        public int UniversityEligible { get; private set; } = 0;
+  
 
         // ── Lifecycle ─────────────────────────────────────────────────────
         protected override void OnCreate()
@@ -99,12 +105,20 @@ namespace CivicVoice.Systems
             _statsSystem = World.GetOrCreateSystemManaged<Game.Simulation.CityStatisticsSystem>();
             _residentialDemandSystem = World.GetOrCreateSystemManaged<Game.Simulation.ResidentialDemandSystem>();
             _commercialDemandSystem = World.GetOrCreateSystemManaged<Game.Simulation.CommercialDemandSystem>();
-            _industrialDemandSystem = World.GetOrCreateSystemManaged<Game.Simulation.IndustrialDemandSystem>();
+            ElectionsModActive = AppDomain.CurrentDomain.GetAssemblies()
+                .Any(a => a.GetName().Name == "Elections");
             CivicMod.log.Info("CivicVoiceSystem created.");
         }
 
         protected override void OnUpdate()
         {
+            if (!_electionsModChecked)
+            {
+                _electionsModChecked = true;
+                ElectionsModActive = AppDomain.CurrentDomain.GetAssemblies()
+                    .Any(a => a.GetName().Name == "Elections");
+                CivicMod.log.Info($"[CivicVoice] Elections mod detected: {ElectionsModActive}");
+            }
             if (!_loaded)
             {
                 _loaded = true;
@@ -125,15 +139,48 @@ namespace CivicVoice.Systems
             DoCheckForAdHocProposals();
             DoCheckForMajorProposals();
             DoFluctuateProposalVotes();
-            DoCheckForElection();
+            if (!ElectionsModActive) DoCheckForElection();
 
             foreach (var p in Data.ProposedProjects)
                 if (p.Type == ProjectType.Metric && p.GoalType.HasValue)
                     p.CurrentValue = DoGetMetricValue(p.GoalType.Value);
 
             Data.ProposedProjects.RemoveAll(p => IsAlreadyAchieved(p));
+            if (_timeSystem != null) DoCheckBirthdays(_timeSystem.GetCurrentDateTime());
         }
+        // ── Candidate details ─────────────────────────────────────────────
+        private void DoCheckBirthdays(DateTime now)
+        {
+            if (Data.LastAgeCheckDate == DateTime.MinValue)
+            {
+                Data.LastAgeCheckDate = now;
+                return;
+            }
 
+            // Collect all tracked candidates — current mayor + current election candidates
+            var tracked = new List<MayorCandidate>();
+            if (Data.CurrentMayor != null) tracked.Add(Data.CurrentMayor);
+            if (Data.CurrentElection != null)
+                foreach (var c in Data.CurrentElection.Candidates)
+                    if (!tracked.Any(x => x.Name == c.Name))
+                        tracked.Add(c);
+
+            foreach (var c in tracked)
+            {
+                // Find the most recent birthday date before or on now
+                var birthday = new DateTime(now.Year, c.BirthdayMonth, c.BirthdayDay);
+                if (birthday > now) birthday = birthday.AddYears(-1);
+
+                // If birthday falls between last check and now, increment age
+                if (birthday > Data.LastAgeCheckDate && birthday <= now)
+                {
+                    c.Age++;
+                    CivicMod.log.Info($"[CivicVoice] {c.Name} turned {c.Age}");
+                }
+            }
+
+            Data.LastAgeCheckDate = now;
+        }
         // ── Stats ─────────────────────────────────────────────────────────
         private void DoUpdateStats()
         {
@@ -143,6 +190,7 @@ namespace CivicVoice.Systems
                 Population = cs.MovedInCitizenCount;
                 Unemployment = cs.UnemploymentRate;
                 Happiness = cs.AverageCitizenHappiness;
+                Wellbeing = cs.AverageCitizenHappiness;
                 HomelessCount = cs.HomelessHouseholdCount;
                 TeenCount = cs.TeenCount;
                 AdultCount = cs.AdultCount;
@@ -154,11 +202,9 @@ namespace CivicVoice.Systems
             {
                 if (_statsSystem != null)
                 {
-                    Health = _statsSystem.GetStatisticValue(StatisticType.Health);
-                    Wellbeing = _statsSystem.GetStatisticValue(StatisticType.Wellbeing);
-                    CrimeRate = _statsSystem.GetStatisticValue(StatisticType.CrimeRate);
                     Income = _statsSystem.GetStatisticValue(StatisticType.Income);
                     Expense = _statsSystem.GetStatisticValue(StatisticType.Expense);
+
                 }
             }
             catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (city stats): {ex.Message}"); }
@@ -176,16 +222,42 @@ namespace CivicVoice.Systems
             }
             catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (demand): {ex.Message}"); }
 
+
             try
             {
-                var gs = World.GetOrCreateSystemManaged<Game.UI.InGame.GarbageInfoviewUISystem>();
+                var es = World.GetOrCreateSystemManaged<Game.UI.InGame.EducationInfoviewUISystem>();
                 var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
-                var rateM = gs?.GetType().GetMethod("GetProcessingRate", flags);
-                var capM = gs?.GetType().GetMethod("GetGarbageCapacity", flags);
-                if (rateM != null) GarbageProcessingRate = (float)rateM.Invoke(gs, null);
-                if (capM != null) GarbageCapacity = (int)capM.Invoke(gs, null);
+                var capF = es?.GetType().GetField("m_UniversityCapacity", flags);
+                var eligF = es?.GetType().GetField("m_UniversityEligible", flags);
+                if (capF != null) UniversityCapacity = ((Colossal.UI.Binding.ValueBinding<int>)capF.GetValue(es)).value;
+                if (eligF != null) UniversityEligible = ((Colossal.UI.Binding.ValueBinding<int>)eligF.GetValue(es)).value;
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (garbage): {ex.Message}"); }
+            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (university): {ex.Message}"); }
+
+            try
+            {
+                var hs = World.GetOrCreateSystemManaged<Game.UI.InGame.HealthcareInfoviewUISystem>();
+                var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var healthF = hs?.GetType().GetField("m_AverageHealth", flags);
+                if (healthF != null) Health = ((Colossal.UI.Binding.ValueBinding<float>)healthF.GetValue(hs)).value;
+            }
+            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (health): {ex.Message}"); }
+
+            try
+            {
+                var ps = World.GetOrCreateSystemManaged<Game.UI.InGame.PoliceInfoviewUISystem>();
+                var flags = System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance;
+                var probF = ps?.GetType().GetField("m_CrimeProbability", flags);
+                var prodF = ps?.GetType().GetField("m_CrimeProducers", flags);
+                if (probF != null && prodF != null)
+                {
+                    float prob = ((Colossal.UI.Binding.ValueBinding<float>)probF.GetValue(ps)).value;
+                    int producers = ((Colossal.UI.Binding.ValueBinding<int>)prodF.GetValue(ps)).value;
+                    CrimeRate = producers > 0 ? (prob / producers) / 250f : 0f;
+                }
+            }
+            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (crime): {ex.Message}"); }
+
         }
 
         // ── Metric triggered proposals ────────────────────────────────────
@@ -201,6 +273,7 @@ namespace CivicVoice.Systems
             float wellbThreshold = Mod.Settings?.WellbeingThreshold ?? 50f;
             float housingThreshold = Mod.Settings?.HousingDemandThreshold ?? 70f;
 
+
             DoTryAddMetricProject("crime", CrimeRate > crimeThreshold, now, new CivicProject
             {
                 Title = "Expand police presence",
@@ -209,7 +282,7 @@ namespace CivicVoice.Systems
                 Type = ProjectType.Metric,
                 Category = ProjectCategory.PublicSafety,
                 GoalType = MetricGoalType.CrimeRateBelow,
-                GoalTarget = Math.Max(CrimeRate * 0.7f, 5f),
+                GoalTarget = Math.Max(CrimeRate * 0.8f, 5f),
                 DeadlineGameDays = 3
             }, now);
 
@@ -221,7 +294,7 @@ namespace CivicVoice.Systems
                 Type = ProjectType.Metric,
                 Category = ProjectCategory.Housing,
                 GoalType = MetricGoalType.HomelessBelow,
-                GoalTarget = Math.Max(HomelessCount * 0.5f, 5f),
+                GoalTarget = Math.Max(HomelessCount * 0.8f, 2f),
                 DeadlineGameDays = 4
             }, now);
 
@@ -233,19 +306,19 @@ namespace CivicVoice.Systems
                 Type = ProjectType.Metric,
                 Category = ProjectCategory.Economy,
                 GoalType = MetricGoalType.UnemploymentBelow,
-                GoalTarget = Math.Max(Unemployment - 4f, 2f),
+                GoalTarget = Math.Max(Unemployment * 0.8f, 2f),
                 DeadlineGameDays = 6
             }, now);
 
             DoTryAddMetricProject("health", Health > 0 && Health < healthThreshold, now, new CivicProject
             {
                 Title = "Improve healthcare services",
-                Description = $"Citizen health levels are at {Health:F0}. Residents are demanding better access to healthcare facilities.",
+                Description = $"Average health level is at {Health:F0}. Residents are demanding better access to healthcare facilities.",
                 Tier = ProjectTier.MetricTriggered,
                 Type = ProjectType.Metric,
                 Category = ProjectCategory.Healthcare,
                 GoalType = MetricGoalType.HealthAbove,
-                GoalTarget = Math.Min(Health + 15f, 70f),
+                GoalTarget = Math.Min(Health + 10f, 60f),
                 DeadlineGameDays = 4
             }, now);
 
@@ -273,19 +346,7 @@ namespace CivicVoice.Systems
                 DeadlineGameDays = 3
             }, now);
 
-            DoTryAddMetricProject("garbage", GarbageProcessingRate > 0 && GarbageProcessingRate < 0.5f && GarbageCapacity > 0, now, new CivicProject
-            {
-                Title = "Expand garbage processing capacity",
-                Description = $"Garbage is piling up with only {GarbageProcessingRate * 100:F0}% processing capacity.",
-                Tier = ProjectTier.MetricTriggered,
-                Type = ProjectType.Metric,
-                Category = ProjectCategory.Environment,
-                GoalType = MetricGoalType.WellbeingAbove,
-                GoalTarget = Math.Min(Wellbeing + 10f, 80f),
-                DeadlineGameDays = 4
-            }, now);
-
-            DoTryAddMetricProject("housing_low", LowDensityDemand > housingThreshold, now, new CivicProject
+            DoTryAddMetricProject("housing_low", LowDensityDemand > housingThreshold && !Data.ProposedProjects.Any(p => p.GoalType == MetricGoalType.LowDensityDemandBelow) && !Data.ActiveProjects.Any(p => p.GoalType == MetricGoalType.LowDensityDemandBelow), now, new CivicProject
             {
                 Title = "Zone more low density housing",
                 Description = "Demand for low density housing is high. Residents want more space to build family homes.",
@@ -297,7 +358,7 @@ namespace CivicVoice.Systems
                 DeadlineGameDays = 6
             }, now);
 
-            DoTryAddMetricProject("housing_med", MedDensityDemand > housingThreshold, now, new CivicProject
+            DoTryAddMetricProject("housing_med", MedDensityDemand > housingThreshold && !Data.ProposedProjects.Any(p => p.GoalType == MetricGoalType.MedDensityDemandBelow) && !Data.ActiveProjects.Any(p => p.GoalType == MetricGoalType.MedDensityDemandBelow), now, new CivicProject
             {
                 Title = "Develop medium density neighbourhoods",
                 Description = "Demand for medium density housing is high. Citizens want more apartment blocks and townhouses.",
@@ -309,7 +370,7 @@ namespace CivicVoice.Systems
                 DeadlineGameDays = 6
             }, now);
 
-            DoTryAddMetricProject("housing_high", HighDensityDemand > housingThreshold, now, new CivicProject
+            DoTryAddMetricProject("housing_high", HighDensityDemand > housingThreshold && !Data.ProposedProjects.Any(p => p.GoalType == MetricGoalType.HighDensityDemandBelow) && !Data.ActiveProjects.Any(p => p.GoalType == MetricGoalType.HighDensityDemandBelow), now, new CivicProject
             {
                 Title = "Build high density housing",
                 Description = "Demand for high density housing is high. Some residents want tower blocks but others are concerned about neighbourhood character.",
@@ -322,7 +383,7 @@ namespace CivicVoice.Systems
             }, now);
         }
 
-        private string GetMetricKey(CivicProject p) => p.GoalType switch
+        private string? GetMetricKey(CivicProject p) => p.GoalType switch
         {
             MetricGoalType.CrimeRateBelow => "crime",
             MetricGoalType.HomelessBelow => "homeless",
@@ -339,12 +400,17 @@ namespace CivicVoice.Systems
         private void DoTryAddMetricProject(string key, bool condition, DateTime now, CivicProject project, DateTime currentTime)
         {
             if (!condition) return;
-            if (Data.MetricProjectCooldowns.TryGetValue(key, out DateTime cooldownEnd) && currentTime < cooldownEnd) return;
+            if (Data.MetricProjectCooldowns.TryGetValue(key, out DateTime cooldownEnd) && currentTime.Date < cooldownEnd.Date)
+            {
+                return;
+            }
             if (Data.ProposedProjects.Any(p => p.Title == project.Title)) return;
             if (Data.ActiveProjects.Any(p => p.Title == project.Title)) return;
 
             DoAssignVotes(project);
             Data.ProposedProjects.Add(project);
+            int addCooldown = Mod.Settings?.MetricProposalCooldownMonths ?? 2;
+            Data.MetricProjectCooldowns[key] = (_timeSystem?.GetCurrentDateTime() ?? DateTime.MinValue).AddDays(addCooldown);
             CivicMod.log.Info($"[CivicVoice] Metric proposal added: {project.Title} (key: {key})");
             DoNotify($"Citizens are demanding action: \"{project.Title}\"");
         }
@@ -387,83 +453,101 @@ namespace CivicVoice.Systems
 
         private int GetMayorWeight(CivicProject p, MayorSpecialty? specialty)
         {
-            if (specialty == null) return 1;
-            var favoured = specialty switch
+            int weight = 1;
+            if (specialty != null)
             {
-                MayorSpecialty.Healthcare => new[] { ProjectCategory.Healthcare },
-                MayorSpecialty.Economy => new[] { ProjectCategory.Economy },
-                MayorSpecialty.Environment => new[] { ProjectCategory.Environment, ProjectCategory.Leisure },
-                MayorSpecialty.Infrastructure => new[] { ProjectCategory.Infrastructure, ProjectCategory.Transport },
-                MayorSpecialty.Education => new[] { ProjectCategory.Education },
-                MayorSpecialty.PublicSafety => new[] { ProjectCategory.PublicSafety },
-                _ => new ProjectCategory[] { }
-            };
-            return favoured.Contains(p.Category) ? 3 : 1;
+                var favoured = specialty switch
+                {
+                    MayorSpecialty.Healthcare => new[] { ProjectCategory.Healthcare },
+                    MayorSpecialty.Economy => new[] { ProjectCategory.Economy },
+                    MayorSpecialty.Environment => new[] { ProjectCategory.Environment, ProjectCategory.Leisure },
+                    MayorSpecialty.Infrastructure => new[] { ProjectCategory.Infrastructure, ProjectCategory.Transport },
+                    MayorSpecialty.Education => new[] { ProjectCategory.Education },
+                    MayorSpecialty.PublicSafety => new[] { ProjectCategory.PublicSafety },
+                    _ => new ProjectCategory[] { }
+                };
+                if (favoured.Contains(p.Category)) weight += 2;
+            }
+            float healthThreshold = Mod.Settings?.HealthThreshold ?? 50f;
+            if (p.Title == "Build a new hospital" && Health < healthThreshold) weight += 4;
+            return weight;
         }
 
         private List<CivicProject> DoBuildAdHocPool() => new List<CivicProject>
-{
-    new CivicProject {
-        Title = "Build a public park",
-        Description = "Residents want green spaces to enjoy and relax in. A new park would improve quality of life.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Leisure,
-        GoalType = MetricGoalType.HappinessAbove, GoalTarget = Math.Min(Happiness + 5f, 85f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Improve leisure facilities",
-        Description = "Citizens want more recreational options. Expanding parks and leisure areas would improve quality of life.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Leisure,
-        GoalType = MetricGoalType.WellbeingAbove, GoalTarget = Math.Min(Wellbeing + 5f, 85f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Build a fire station",
-        Description = "Residents want better fire protection across the city. A new fire station would improve safety.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.PublicSafety,
-        GoalType = MetricGoalType.HappinessAbove, GoalTarget = Math.Min(Happiness + 4f, 84f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Develop a new shopping strip",
-        Description = $"Citizens want more retail options. Commercial demand is at {CommercialDemand:F0}%. A new commercial area would boost the local economy.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Economy,
-        GoalType = MetricGoalType.CommercialDemandBelow, GoalTarget = 40f,
-        DeadlineGameDays = 6 },
-    new CivicProject {
-        Title = "Build a new school",
-        Description = "Parents are concerned about education access. A new school would improve opportunities for children.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Education,
-        GoalType = MetricGoalType.WellbeingAbove, GoalTarget = Math.Min(Wellbeing + 5f, 85f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Improve public transport",
-        Description = "Citizens want better bus and transit connections across the city.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Transport,
-        GoalType = MetricGoalType.HappinessAbove, GoalTarget = Math.Min(Happiness + 6f, 88f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Expand the electricity network",
-        Description = "More power infrastructure is needed to support city growth.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Infrastructure,
-        GoalType = MetricGoalType.PopulationAbove, GoalTarget = (int)(Population * 1.2f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Build a new suburb",
-        Description = "Citizens want new residential areas. Developing a new suburb would ease housing demand.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Housing,
-        GoalType = MetricGoalType.LowDensityDemandBelow, GoalTarget = 40f,
-        DeadlineGameDays = 6 },
-    new CivicProject {
-        Title = "Reduce industrial pollution",
-        Description = "Residents near industrial areas are complaining about air and ground pollution affecting their quality of life.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Environment,
-        GoalType = MetricGoalType.HappinessAbove, GoalTarget = Math.Min(Happiness + 6f, 88f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-    new CivicProject {
-        Title = "Plant street trees",
-        Description = "Citizens want greener streets. A tree planting initiative would improve air quality and city aesthetics.",
-        Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Environment,
-        GoalType = MetricGoalType.WellbeingAbove, GoalTarget = Math.Min(Wellbeing + 5f, 85f),
-        DeadlineGameDays = 6, ManualCompletion = true },
-};
+        {
+            new CivicProject {
+                Title = "Build a public park",
+                Description = "Residents want green spaces to enjoy and relax in. A new park would improve quality of life.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Leisure,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Improve leisure facilities",
+                Description = "Citizens want more recreational options. Expanding parks and leisure areas would improve quality of life.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Leisure,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Transition to greener facilities",
+                Description = "Citizens want the city to invest in cleaner, more sustainable facilities to reduce its environmental footprint.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Environment,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Build a fire station",
+                Description = "Residents want better fire protection across the city. A new fire station would improve safety.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.PublicSafety,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Develop a new shopping strip",
+                Description = $"Citizens want more retail options. Commercial demand is at {CommercialDemand:F0}%. A new commercial area would boost the local economy.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Economy,
+                GoalType = MetricGoalType.CommercialDemandBelow, GoalTarget = 40f,
+                DeadlineGameDays = 6 },
+            new CivicProject {
+                Title = "Reduce industrial pollution",
+                Description = "Residents near industrial areas are suffering from pollution affecting their quality of life.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Environment,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Build a new college",
+                Description = "Citizens want better further education options. A new college would improve opportunities and skill levels.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Education,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Build a new hospital",
+                Description = "Residents are concerned about healthcare access. A new hospital would improve medical coverage across the city.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Healthcare,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Improve public transport",
+                Description = "Citizens want better bus and transit connections across the city.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Transport,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Expand the electricity network",
+                Description = "More power infrastructure is needed to support city growth.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Infrastructure,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+            new CivicProject {
+                Title = "Build a new suburb",
+                Description = "Citizens want new residential areas. Developing a new suburb would ease housing demand.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Housing,
+                GoalType = MetricGoalType.LowDensityDemandBelow, GoalTarget = 40f,
+                DeadlineGameDays = 6 },
+            new CivicProject {
+                Title = "Plant street trees",
+                Description = "Citizens want greener streets. A tree planting initiative would improve air quality and city aesthetics.",
+                Tier = ProjectTier.AdHoc, Type = ProjectType.Metric, Category = ProjectCategory.Environment,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 6, ManualCompletion = true },
+        };
 
         // ── Major proposals ───────────────────────────────────────────────
         private void DoCheckForMajorProposals()
@@ -482,6 +566,8 @@ namespace CivicVoice.Systems
             Data.LastMajorProjectDate = now;
 
             var pool = DoBuildMajorPool();
+            if (UniversityCapacity >= UniversityEligible * 0.5f)
+                pool.RemoveAll(p => p.Title == "Build a university campus");
             DoShuffle(pool);
 
             int needed = MaxProposedMajor - proposedCount - activeCount;
@@ -504,13 +590,13 @@ namespace CivicVoice.Systems
                 Title = "Develop a new town district",
                 Description = "Citizens want to expand the city with an entirely new district. This is a major undertaking that will take a full year.",
                 Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Housing,
-                GoalType = MetricGoalType.PopulationAbove, GoalTarget = (int)(Population * 1.5f),
+                GoalType = MetricGoalType.None,
                 DeadlineGameDays = 12, ManualCompletion = true },
             new CivicProject {
-                Title = "Build a new port",
-                Description = "A port would open up shipping trade and bring economic growth. A major infrastructure investment for the city.",
+                Title = "Improve export capacity",
+                Description = "Citizens want better trade infrastructure to grow the city's economy and open up new markets.",
                 Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Infrastructure,
-                GoalType = MetricGoalType.PopulationAbove, GoalTarget = (int)(Population * 1.3f),
+                GoalType = MetricGoalType.None,
                 DeadlineGameDays = 12, ManualCompletion = true },
             new CivicProject {
                 Title = "Establish a new industrial complex",
@@ -522,7 +608,7 @@ namespace CivicVoice.Systems
                 Title = "Build a signature landmark",
                 Description = "Citizens want an iconic building that puts the city on the map and attracts tourists.",
                 Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Leisure,
-                GoalType = MetricGoalType.HappinessAbove, GoalTarget = Math.Min(Happiness + 15f, 90f),
+                GoalType = MetricGoalType.None,
                 DeadlineGameDays = 12, ManualCompletion = true },
             new CivicProject {
                 Title = "Develop a new commercial hub",
@@ -534,7 +620,7 @@ namespace CivicVoice.Systems
                 Title = "Build a university campus",
                 Description = "Citizens want world class education facilities. A university would attract talent and boost the city's reputation.",
                 Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Education,
-                GoalType = MetricGoalType.WellbeingAbove, GoalTarget = Math.Min(Wellbeing + 20f, 90f),
+                GoalType = MetricGoalType.None,
                 DeadlineGameDays = 12, ManualCompletion = true },
         };
 
@@ -612,7 +698,7 @@ namespace CivicVoice.Systems
             };
             return Math.Max(0.35f, Math.Min(0.90f, tierBase + categoryMod + (float)(_rng.NextDouble() - 0.35f) * 0.15f));
         }
-
+        // 
         // ── Project actions ───────────────────────────────────────────────
         public bool AcceptProject(string projectId)
         {
@@ -649,7 +735,7 @@ namespace CivicVoice.Systems
 
             if (p.Tier == ProjectTier.MetricTriggered && _timeSystem != null)
             {
-                string key = GetMetricKey(p);
+                string? key = GetMetricKey(p);
                 if (key != null)
                 {
                     int cooldownDays = Mod.Settings?.RejectedCooldownMonths ?? 6;
@@ -659,6 +745,11 @@ namespace CivicVoice.Systems
                     DoNotify($"Proposal rejected: \"{p.Title}\".");
                 }
             }
+            if (p.Title == "Reduce industrial pollution" && _timeSystem != null)
+            {
+                int cooldownDays = Mod.Settings?.RejectedCooldownMonths ?? 6;
+                Data.MetricProjectCooldowns["pollution"] = _timeSystem.GetCurrentDateTime().AddDays(cooldownDays);
+            }
         }
 
         public void AbandonProject(string projectId)
@@ -666,7 +757,8 @@ namespace CivicVoice.Systems
             var p = Data.ActiveProjects.FirstOrDefault(x => x.Id == projectId);
             if (p == null) return;
             Data.ActiveProjects.Remove(p);
-            Data.TotalProjectsFailed++;
+            Data.TotalProjectsAbandoned++;
+            Data.TermProjectsFailed++;
             CivicMod.log.Info($"[CivicVoice] Project abandoned: {p.Title}");
             DoNotify($"Project abandoned: \"{p.Title}\".");
         }
@@ -734,6 +826,7 @@ namespace CivicVoice.Systems
             Data.ActiveProjects.Remove(p);
             Data.CompletedProjects.Add(p);
             Data.TotalProjectsCompleted++;
+            Data.TermProjectsCompleted++;
             CivicMod.log.Info($"[CivicVoice] Project completed: {p.Title}");
             DoNotify($"Project complete: \"{p.Title}\"!");
         }
@@ -743,12 +836,13 @@ namespace CivicVoice.Systems
             p.Status = ProjectStatus.Failed;
             Data.ActiveProjects.Remove(p);
             Data.TotalProjectsFailed++;
+            Data.TermProjectsFailed++;
             CivicMod.log.Info($"[CivicVoice] Project failed: {p.Title}");
             DoNotify($"Project failed: \"{p.Title}\".");
 
             if (p.Tier == ProjectTier.MetricTriggered && _timeSystem != null)
             {
-                string key = GetMetricKey(p);
+                string? key = GetMetricKey(p);
                 if (key != null)
                 {
                     DateTime now = _timeSystem.GetCurrentDateTime();
@@ -756,6 +850,9 @@ namespace CivicVoice.Systems
                     CivicMod.log.Info($"[CivicVoice] Cooldown set for {key} until {now.AddDays(3)}");
                 }
             }
+
+            if (p.Title == "Reduce industrial pollution" && _timeSystem != null)
+                Data.MetricProjectCooldowns["pollution"] = _timeSystem.GetCurrentDateTime().AddDays(3);
         }
 
         private bool IsAlreadyAchieved(CivicProject p)
@@ -791,7 +888,6 @@ namespace CivicVoice.Systems
                 MetricGoalType.HomelessBelow => $"There are {HomelessCount} homeless citizens on the streets. Residents are demanding action to house the vulnerable.",
                 MetricGoalType.UnemploymentBelow => $"Unemployment is at {Unemployment:F1}%. Citizens are struggling to find work and demanding economic action.",
                 MetricGoalType.HealthAbove => $"Citizen health levels are at {Health:F0}. Residents are demanding better access to healthcare facilities.",
-                MetricGoalType.WellbeingAbove when p.Title.Contains("garbage") => $"Garbage is piling up with only {GarbageProcessingRate * 100:F0}% processing capacity. Citizens are demanding better waste management.",
                 MetricGoalType.WellbeingAbove => $"Resident wellbeing is at {Wellbeing:F0}. Citizens are calling for improvements across city services.",
                 MetricGoalType.BudgetSurplus => $"The city is spending more than it earns. Income: £{Income:N0} Expenses: £{Expense:N0}.",
                 MetricGoalType.CommercialDemandBelow => $"Commercial demand is at {CommercialDemand:F0}%. Citizens want more retail and business options.",
@@ -831,11 +927,15 @@ namespace CivicVoice.Systems
                     var winner = Data.CurrentElection.Candidates.OrderByDescending(c => c.Votes).First();
                     Data.CurrentElection.Winner = winner;
                     Data.CurrentElection.IsActive = false;
-                    Data.CurrentMayor = winner;
                     int electionFreq = Mod.Settings?.ElectionFrequencyMonths ?? 12;
                     Data.NextElectionDate = now.AddDays(electionFreq);
                     CivicMod.log.Info($"[CivicVoice] Election won by: {winner.Name} ({winner.PartyName})");
                     DoNotify($"{winner.Name} ({winner.PartyName}) has won the election!");
+                    winner.TermsServed++;
+                    Data.CurrentMayor = winner;
+                    Data.TermProjectsCompleted = 0;
+                    Data.TermProjectsFailed = 0;
+                    Data.MayorElectedDate = now;
                 }
                 return;
             }
@@ -850,8 +950,9 @@ namespace CivicVoice.Systems
                 Data.CurrentElection = DoGenerateElection();
                 var fc1 = Data.CurrentElection.Candidates[0].Name;
                 var fc2 = Data.CurrentElection.Candidates[1].Name;
-                CivicMod.log.Info($"[CivicVoice] Forced election started: {fc1} vs {fc2}");
-                DoNotify($"A special election has been called! {fc1} vs {fc2}");
+                var fc3 = Data.CurrentElection.Candidates[2].Name;
+                CivicMod.log.Info($"[CivicVoice] Forced election started: {fc1} vs {fc2} vs {fc3}");
+                DoNotify($"A special election has been called! {fc1} vs {fc2} vs {fc3}");
                 return;
             }
 
@@ -875,8 +976,9 @@ namespace CivicVoice.Systems
             Data.CurrentElection = DoGenerateElection();
             var c1 = Data.CurrentElection.Candidates[0].Name;
             var c2 = Data.CurrentElection.Candidates[1].Name;
-            CivicMod.log.Info($"[CivicVoice] Election started: {c1} vs {c2}");
-            DoNotify($"Election time! {c1} vs {c2}");
+            var c3 = Data.CurrentElection.Candidates[2].Name;
+            CivicMod.log.Info($"[CivicVoice] Election started: {c1} vs {c2} vs {c3}");
+            DoNotify($"Election time! {c1} vs {c2} vs {c3}");
         }
 
         public void CastVote(string candidateName)
@@ -893,6 +995,23 @@ namespace CivicVoice.Systems
             DoNotify($"You have endorsed {candidateName}. The election will conclude at the end of the voting period.");
         }
 
+        public void ConcludeElection()
+        {
+            if (Data.CurrentElection == null || !Data.CurrentElection.IsActive) return;
+            var winner = Data.CurrentElection.Candidates.OrderByDescending(c => c.Votes).First();
+            Data.CurrentElection.Winner = winner;
+            Data.CurrentElection.IsActive = false;
+            winner.TermsServed++;
+            Data.CurrentMayor = winner;
+            Data.TermProjectsCompleted = 0;
+            Data.TermProjectsFailed = 0;
+            Data.MayorElectedDate = GetCurrentGameDate();
+            int electionFreq = Mod.Settings?.ElectionFrequencyMonths ?? 12;
+            Data.NextElectionDate = GetCurrentGameDate().AddDays(electionFreq);
+            CivicMod.log.Info($"[CivicVoice] Election concluded manually: {winner.Name}");
+            DoNotify($"{winner.Name} ({winner.PartyName}) has won the election!");
+        }
+
         public DateTime GetCurrentGameDate()
         {
             if (_timeSystem == null) return DateTime.MinValue;
@@ -900,20 +1019,77 @@ namespace CivicVoice.Systems
             catch { return DateTime.MinValue; }
         }
 
+        private int DoGetApprovalScore()
+        {
+            return Math.Max(0, Math.Min(100,
+                (Data.TermProjectsCompleted * 8) - (Data.TermProjectsFailed * 12) + 50));
+        }
+
         private MayorElection DoGenerateElection()
         {
             var allSpecialties = (MayorSpecialty[])Enum.GetValues(typeof(MayorSpecialty));
             DoShuffle(allSpecialties);
 
-            var candidate1 = DoMakeCandidate(allSpecialties[0]);
-            var candidate2 = DoMakeCandidate(allSpecialties[1]);
-
             int totalVoters = Math.Max(10, TeenCount + AdultCount + SeniorCount);
-            float share = 0.4f + (float)_rng.NextDouble() * 0.2f;
-            candidate1.Votes = (int)(totalVoters * share);
-            candidate2.Votes = totalVoters - candidate1.Votes;
+            var candidates = new List<MayorCandidate>();
 
-            return new MayorElection { Candidates = new List<MayorCandidate> { candidate1, candidate2 } };
+            // Check if incumbent can run
+            bool incumbentRuns = Data.CurrentMayor != null && Data.CurrentMayor.TermsServed < 2;
+
+            if (incumbentRuns)
+            {
+                // Incumbent runs with approval-weighted votes
+                int approval = DoGetApprovalScore();
+                float incumbentShare = approval >= 70 ? 0.45f
+                                     : approval >= 40 ? 0.33f
+                                     : 0.20f;
+
+                var incumbent = Data.CurrentMayor!;
+                incumbent.Votes = (int)(totalVoters * incumbentShare);
+                candidates.Add(incumbent);
+
+                // Two fresh challengers split remaining votes
+                int remainingVoters = totalVoters - incumbent.Votes;
+                var usedSpecialties = new HashSet<MayorSpecialty> { incumbent.Specialty };
+                int added = 0;
+                foreach (var s in allSpecialties)
+                {
+                    if (usedSpecialties.Contains(s)) continue;
+                    var challenger = DoMakeCandidate(s);
+                    float challengerShare = added == 0
+                        ? 0.5f + (float)(_rng.NextDouble() - 0.5) * 0.2f
+                        : 1f;
+                    challenger.Votes = added == 0
+                        ? (int)(remainingVoters * challengerShare)
+                        : remainingVoters - candidates[1].Votes;
+                    candidates.Add(challenger);
+                    usedSpecialties.Add(s);
+                    added++;
+                    if (added >= 2) break;
+                }
+            }
+            else
+            {
+                // Three fresh challengers
+                int idx = 0;
+                foreach (var s in allSpecialties)
+                {
+                    if (idx >= 3) break;
+                    candidates.Add(DoMakeCandidate(s));
+                    idx++;
+                }
+
+                // Distribute votes randomly across three
+                float share1 = 0.25f + (float)_rng.NextDouble() * 0.25f;
+                float share2 = 0.25f + (float)_rng.NextDouble() * 0.25f;
+                if (share1 + share2 > 0.9f) share2 = 0.9f - share1;
+                candidates[0].Votes = (int)(totalVoters * share1);
+                candidates[1].Votes = (int)(totalVoters * share2);
+                candidates[2].Votes = totalVoters - candidates[0].Votes - candidates[1].Votes;
+            }
+
+            DoShuffle(candidates);
+            return new MayorElection { Candidates = candidates };
         }
 
         private MayorCandidate DoMakeCandidate(MayorSpecialty s) => new MayorCandidate
@@ -922,7 +1098,9 @@ namespace CivicVoice.Systems
             Age = _rng.Next(35, 68),
             Specialty = s,
             PartyName = s_Parties[_rng.Next(s_Parties.Length)],
-            Slogan = DoGetSlogan(s)
+            Slogan = DoGetSlogan(s),
+            BirthdayMonth = _rng.Next(1, 13),
+            BirthdayDay = _rng.Next(1, 29)
         };
 
         private static string DoGetSlogan(MayorSpecialty s) => s switch
@@ -965,7 +1143,6 @@ namespace CivicVoice.Systems
                         ObjectCreationHandling = ObjectCreationHandling.Replace
                     };
                     Data = JsonConvert.DeserializeObject<CivicVoiceSaveData>(json, settings) ?? new CivicVoiceSaveData();
-                    // Migration: set ManualCompletion for AdHoc projects
                     foreach (var p in Data.ProposedProjects.Where(p => p.Tier == ProjectTier.AdHoc && p.Title != "Develop a new shopping strip" && p.Title != "Build a new suburb"))
                         p.ManualCompletion = true;
                     foreach (var p in Data.ActiveProjects.Where(p => p.Tier == ProjectTier.AdHoc && p.Title != "Develop a new shopping strip" && p.Title != "Build a new suburb"))
@@ -994,8 +1171,7 @@ namespace CivicVoice.Systems
         // ── Helpers ───────────────────────────────────────────────────────
         private void DoNotify(string msg)
         {
-            if (Mod.Settings?.ShowNotifications ?? true)
-                Notifications.Add(msg);
+            Notifications.Add(msg);
             CivicMod.log.Info($"[CivicVoice] {msg}");
         }
 
