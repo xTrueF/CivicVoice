@@ -17,8 +17,8 @@ namespace CivicVoice
 {
     [FileLocation("CivicVoice")]
     [SettingsUITabOrder(CivicVoiceSettings.kGeneralTab, CivicVoiceSettings.kProposalsTab, CivicVoiceSettings.kElectionsTab)]
-    [SettingsUIGroupOrder(CivicVoiceSettings.kUIGroup, CivicVoiceSettings.kElectionGroup, CivicVoiceSettings.kResetGroup, CivicVoiceSettings.kThresholdsGroup, CivicVoiceSettings.kProjectsGroup, CivicVoiceSettings.kElectionsActionGroup)]
-    [SettingsUIShowGroupName(CivicVoiceSettings.kUIGroup, CivicVoiceSettings.kElectionGroup, CivicVoiceSettings.kResetGroup, CivicVoiceSettings.kThresholdsGroup, CivicVoiceSettings.kProjectsGroup, CivicVoiceSettings.kElectionsActionGroup)]
+    [SettingsUIGroupOrder(CivicVoiceSettings.kUIGroup, CivicVoiceSettings.kElectionGroup, CivicVoiceSettings.kResetGroup, CivicVoiceSettings.kThresholdsGroup, CivicVoiceSettings.kProjectsGroup, CivicVoiceSettings.kApprovalWeightsGroup, CivicVoiceSettings.kElectionsActionGroup)]
+    [SettingsUIShowGroupName(CivicVoiceSettings.kUIGroup, CivicVoiceSettings.kElectionGroup, CivicVoiceSettings.kResetGroup, CivicVoiceSettings.kThresholdsGroup, CivicVoiceSettings.kProjectsGroup, CivicVoiceSettings.kApprovalWeightsGroup, CivicVoiceSettings.kElectionsActionGroup)]
     public class CivicVoiceSettings : ModSetting
     {
         // Tabs
@@ -31,6 +31,7 @@ namespace CivicVoice
         public const string kElectionGroup = "Elections";
         public const string kThresholdsGroup = "Thresholds";
         public const string kProjectsGroup = "Projects";
+        public const string kApprovalWeightsGroup = "ApprovalWeights";
         public const string kElectionsActionGroup = "ElectionsActions";
         public const string kResetGroup = "Reset";
 
@@ -90,7 +91,7 @@ namespace CivicVoice
 
         [SettingsUISection(kProposalsTab, kProjectsGroup)]
         [SettingsUISlider(min = 1, max = 4, step = 1)]
-        public int MaxActiveMajorProposals { get; set; } = 2;
+        public int MaxActiveMajorProposals { get; set; } = 1;
 
         [SettingsUISection(kProposalsTab, kProjectsGroup)]
         [SettingsUISlider(min = 100, max = 2000, step = 100)]
@@ -107,6 +108,18 @@ namespace CivicVoice
         [SettingsUISection(kProposalsTab, kProjectsGroup)]
         [SettingsUISlider(min = 1, max = 12, step = 1)]
         public int MetricProposalCooldownMonths { get; set; } = 2;
+
+        [SettingsUISection(kProposalsTab, kApprovalWeightsGroup)]
+        [SettingsUISlider(min = 1, max = 5, step = 1)]
+        public int UrgentProjectApprovalWeight { get; set; } = 1;
+
+        [SettingsUISection(kProposalsTab, kApprovalWeightsGroup)]
+        [SettingsUISlider(min = 1, max = 5, step = 1)]
+        public int AdHocProjectApprovalWeight { get; set; } = 1;
+
+        [SettingsUISection(kProposalsTab, kApprovalWeightsGroup)]
+        [SettingsUISlider(min = 1, max = 5, step = 1)]
+        public int MajorProjectApprovalWeight { get; set; } = 3;
 
         // ── Election Tab ─────────────────────────────────────────────────────────
 
@@ -154,18 +167,24 @@ namespace CivicVoice
             WellbeingThreshold = 50;
             MaxActiveMetricProposals = 3;
             MaxActiveAdHocProposals = 3;
-            MaxActiveMajorProposals = 2;
+            MaxActiveMajorProposals = 1;
             MajorProjectMinPopulation = 500;
             AdHocCooldownMonths = 3;
             RejectedCooldownMonths = 3;
             EndorsementInfluencePercent = 5;
             MetricProposalCooldownMonths = 2;
+            AdHocProjectApprovalWeight = 1;
+            UrgentProjectApprovalWeight = 1;
+            MajorProjectApprovalWeight = 3;
         }
     }
 
     public class Mod : IMod
     {
         public static ILog log = LogManager.GetLogger($"{nameof(CivicVoice)}.{nameof(Mod)}")
+                    .SetShowsErrorsInUI(false);
+
+        public static ILog uiLog = LogManager.GetLogger($"{nameof(CivicVoice)}.UI")
             .SetShowsErrorsInUI(false);
 
         public static CivicVoiceSettings? Settings { get; private set; }

@@ -85,6 +85,11 @@
 		<PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
 	</ItemGroup>
 
+	<ItemGroup>
+	  <Folder Include="CivicVoiceUI\src\mods\newspaper\" />
+	  <Folder Include="UI\src\" />
+	</ItemGroup>
+
 	<Target Name="CopyUI" AfterTargets="Build">
 		<Copy SourceFiles="$(MSBuildProjectDirectory)\UI\dist\civicvoice.js" DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />
 		<Copy SourceFiles="$(MSBuildProjectDirectory)\CivicVoiceUI\src\ballot.svg" DestinationFolder="$(CSII_MODPATH)\CivicVoice\ui\" />

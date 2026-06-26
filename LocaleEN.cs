@@ -1,4 +1,5 @@
 ﻿using Colossal;
+using Colossal.IO.AssetDatabase.Internal;
 using System.Collections.Generic;
 
 namespace CivicVoice
@@ -28,6 +29,7 @@ namespace CivicVoice
     { _settings.GetOptionGroupLocaleID(CivicVoiceSettings.kElectionGroup), "Elections" },
     { _settings.GetOptionGroupLocaleID(CivicVoiceSettings.kThresholdsGroup), "Proposal Thresholds" },
     { _settings.GetOptionGroupLocaleID(CivicVoiceSettings.kProjectsGroup), "Project Limits" },
+    { _settings.GetOptionGroupLocaleID(CivicVoiceSettings.kApprovalWeightsGroup), "Approval Weights" },
     { _settings.GetOptionGroupLocaleID(CivicVoiceSettings.kElectionsActionGroup), "Election Actions" },
     { _settings.GetOptionGroupLocaleID(CivicVoiceSettings.kResetGroup), "Reset" },
 
@@ -84,6 +86,15 @@ namespace CivicVoice
 
     { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.MetricProposalCooldownMonths)), "Metric Proposal Cooldown (months)" },
     { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.MetricProposalCooldownMonths)), "Months before the same metric proposal can be generated again." },
+
+    { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.MajorProjectApprovalWeight)), "Major Project Weight" },
+    { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.MajorProjectApprovalWeight)), "Multiplier applied to mayor approval when a major project is completed or failed." },
+
+    { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.AdHocProjectApprovalWeight)), "Citizen Project Weight" },
+    { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.AdHocProjectApprovalWeight)), "Multiplier applied to mayor approval when a citizen proposal is completed or failed." },
+
+    { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.UrgentProjectApprovalWeight)), "Urgent Project Weight" },
+    { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.UrgentProjectApprovalWeight)), "Multiplier applied to mayor approval when an urgent proposal is completed or failed." },
 
     { _settings.GetOptionLabelLocaleID(nameof(CivicVoiceSettings.ForceElection)), "Force Election" },
     { _settings.GetOptionDescLocaleID(nameof(CivicVoiceSettings.ForceElection)), "Trigger a mayoral election immediately." },

@@ -75,6 +75,13 @@ module.exports = {
           filename: "images/[name][ext][query]",
         },
       },
+      {
+        test: /\.(woff|woff2|ttf|eot)$/i,
+        type: "asset/resource",
+        generator: {
+          filename: "fonts/[name][ext][query]",
+        },
+      },
     ],
   },
   resolve: {

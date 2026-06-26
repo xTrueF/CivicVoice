@@ -1,3 +1,22 @@
+## [0.4.0] - 2026-06-26
+### Added
+- Newspaper feature — after every election, one of three publications appears: The Herald, The Uproar, or Civic Pulse, each with its own style, personality and custom typefaces. Includes the election result, candidate vote shares, turnout, a winner quote, local filler stories, and a splash headline that varies by how the vote went. The simulation pauses automatically while you read
+- Two new major proposals: Construct a Regional Airport Hub (one-time) and Launch a City Regeneration Scheme
+- Approval weights settings — configure how much each project tier affects the mayor's approval rating
+- Abandoned projects now tracked in the Elections tab alongside completed and failed
+
+### Changed
+- Accept button is now disabled when the active cap for that proposal tier has been reached
+- Election vote drip rate scales with eligible voter count so elections fill at a consistent pace in large cities
+- Population counter and all stat counts now display in compact format (e.g. 50.5k, 534k, 1.23m)
+- Project stat counters (completed, failed, abandoned) always increment by 1 regardless of project tier
+- Major project cap defaulted to 1 (was 2)
+
+### Fixed
+- Natural resource proposals could cause a crash if the resource system was not yet available on load
+- Mayor birthdays were never assigned to days 29–31 of the month
+
+
 ## [0.3.0] - 2026-06-16
 ### Added
 - Three-way elections with incumbent re-election, two-term limits and approval-weighted voting

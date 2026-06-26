@@ -6,7 +6,9 @@
 using CivicVoice.Models;
 using Colossal.Serialization.Entities;
 using Game;
+using Game.SceneFlow;
 using Game.City;
+using Game.Simulation;
 using Game.UI.InGame;
 using Newtonsoft.Json;
 using System;
@@ -23,10 +25,10 @@ namespace CivicVoice.Systems
         // ── Settings-driven limits ────────────────────────────────────────
         private int MaxActiveMetric => Mod.Settings?.MaxActiveMetricProposals ?? 3;
         private int MaxActiveAdHoc => Mod.Settings?.MaxActiveAdHocProposals ?? 2;
-        private int MaxActiveMajor => Mod.Settings?.MaxActiveMajorProposals ?? 2;
+        private int MaxActiveMajor => Mod.Settings?.MaxActiveMajorProposals ?? 1;
         private int MaxActiveProjects => MaxActiveMetric + MaxActiveAdHoc + MaxActiveMajor;
         private int MaxProposedAdHoc => Mod.Settings?.MaxActiveAdHocProposals ?? 2;
-        private int MaxProposedMajor => Mod.Settings?.MaxActiveMajorProposals ?? 2;
+        private int MaxProposedMajor => Mod.Settings?.MaxActiveMajorProposals ?? 1;
 
         // ── Static data ───────────────────────────────────────────────────
         private static readonly string[] s_FirstNames = {
@@ -38,7 +40,16 @@ namespace CivicVoice.Systems
             "Deborah", "Brian", "Sharon", "George", "Karen", "Edward", "Lisa",
             "Benjamin", "Olivia", "Charles", "Sophie", "Jonathan", "Charlotte",
             "Alexander", "Grace", "Patrick", "Victoria", "Simon", "Elizabeth",
-            "Marcus", "Diana", "Oliver", "Hannah", "Lucas", "Natalie"
+            "Marcus", "Diana", "Oliver", "Hannah", "Lucas", "Natalie",
+            "Nathan", "Chloe", "Adam", "Zoe", "Sean", "Fiona", "Ryan", "Leah",
+            "Jack", "Amber", "Harry", "Ellie", "Jake", "Harriet", "Owen", "Iris",
+            "Ethan", "Alice", "Liam", "Rosie", "Calum", "Imogen", "Kieran", "Molly",
+            "Dominic", "Penelope", "Adrian", "Lydia", "Brendan", "Nora", "Colin", "Ruth",
+            "Gareth", "Heather", "Nigel", "Judith", "Alistair", "Vivian", "Clive", "Audrey",
+            "Rowan", "Sienna", "Felix", "Phoebe", "Leo", "Freya", "Hugo", "Isla",
+            "Theo", "Eliza", "Jasper", "Arabella", "Miles", "Cecily", "Edmund", "Wren",
+            "Maya", "Aaron", "Priya", "Leon", "Aisha", "Omar", "Layla", "Tariq",
+            "Nina", "Stefan", "Elena", "Marco", "Rosa", "Luca", "Petra", "Sven"
         };
         private static readonly string[] s_LastNames = {
             "Harrison", "Bennett", "Fletcher", "Thornton", "Coleman", "Webb",
@@ -50,12 +61,26 @@ namespace CivicVoice.Systems
             "Mitchell", "Cooper", "Morris", "Ward", "Watson", "Brooks",
             "Kelly", "Murray", "Reid", "Campbell", "Stewart", "Anderson",
             "MacDonald", "Ahmed", "Ali", "Shah", "Hussain", "Malik",
-            "Okafor", "Mensah", "Diallo", "Nkosi", "Fernandez", "Garcia"
+            "Okafor", "Mensah", "Diallo", "Nkosi", "Fernandez", "Garcia",
+            "Barrett", "Chambers", "Dawson", "Fleming", "Goodwin", "Hammond",
+            "Hawkins", "Hayward", "Holloway", "Horton", "Houghton", "Ingram",
+            "Jennings", "Keane", "Lawson", "Marsden", "Maxwell", "Naylor",
+            "Norris", "Osborne", "Pearce", "Pennington", "Preston", "Ramsay",
+            "Rawlings", "Sherwood", "Simmons", "Slater", "Sutton", "Sweeney",
+            "Tanner", "Underwood", "Vaughan", "Walters", "Warwick", "Whitfield",
+            "Wilkins", "Yates", "Cross", "Frost", "Lane", "Park",
+            "Stone", "Swift", "Blake", "Chase", "Drake", "Ford",
+            "Grant", "Hayes", "Hunt", "Knox", "Nash", "Page",
+            "Quinn", "Ross", "Rowe", "Sharp", "Vance", "Wade",
+            "Nwosu", "Eze", "Owusu", "Boateng", "Asante", "Conteh",
+            "Nakamura", "Yamamoto", "Andersen", "Nielsen", "Kowalski", "Novak",
+            "Petrov", "Vasquez", "Reyes", "Santos", "Costa", "Ferreira"
         };
         private static readonly string[] s_Parties = {
             "Citizens First Party", "Progressive City Alliance", "Conservative Growth Party",
             "Green Future Movement", "People's Reform Party", "Urban Renewal Coalition"
         };
+
 
         // ── Instance fields ───────────────────────────────────────────────
         public CivicVoiceSaveData Data { get; private set; } = new CivicVoiceSaveData();
@@ -68,12 +93,13 @@ namespace CivicVoice.Systems
         private static readonly Random _rng = new Random();
         public static bool ElectionsModActive { get; private set; } = false;
         private bool _electionsModChecked = false;
+        private bool _gameStartLogged = false;
 
         public Game.Simulation.TimeSystem? _timeSystem;
         private Game.Simulation.CityStatisticsSystem? _statsSystem;
         private Game.Simulation.ResidentialDemandSystem? _residentialDemandSystem;
         private Game.Simulation.CommercialDemandSystem? _commercialDemandSystem;
-        private Game.Simulation.IndustrialDemandSystem? _industrialDemandSystem;
+        private NaturalResourcesInfoviewUISystem? _naturalResourcesSystem;
 
         // ── Cached stats ──────────────────────────────────────────────────
         public float Happiness { get; private set; } = 50f;
@@ -107,7 +133,7 @@ namespace CivicVoice.Systems
             _commercialDemandSystem = World.GetOrCreateSystemManaged<Game.Simulation.CommercialDemandSystem>();
             ElectionsModActive = AppDomain.CurrentDomain.GetAssemblies()
                 .Any(a => a.GetName().Name == "Elections");
-            CivicMod.log.Info("CivicVoiceSystem created.");
+            Mod.log.Info("CivicVoiceSystem created.");
         }
 
         protected override void OnUpdate()
@@ -117,7 +143,7 @@ namespace CivicVoice.Systems
                 _electionsModChecked = true;
                 ElectionsModActive = AppDomain.CurrentDomain.GetAssemblies()
                     .Any(a => a.GetName().Name == "Elections");
-                CivicMod.log.Info($"[CivicVoice] Elections mod detected: {ElectionsModActive}");
+                Mod.log.Info($"[CivicVoice] Elections mod detected: {ElectionsModActive}");
             }
             if (!_loaded)
             {
@@ -125,9 +151,15 @@ namespace CivicVoice.Systems
                 Data = new CivicVoiceSaveData();
             }
 
+            if (GameManager.instance.gameMode != GameMode.Game) return;
+
+            if (!_gameStartLogged) { _gameStartLogged = true; Mod.log.Info($"[CivicVoice] gameMode=Game confirmed, tick={_lastTickDay}"); }
+
             _tickCounter++;
             if (_tickCounter < 60) return;
             _tickCounter = 0;
+
+            _naturalResourcesSystem = World.GetOrCreateSystemManaged<NaturalResourcesInfoviewUISystem>();
 
             DoUpdateStats();
 
@@ -139,7 +171,11 @@ namespace CivicVoice.Systems
             DoCheckForAdHocProposals();
             DoCheckForMajorProposals();
             DoFluctuateProposalVotes();
-            if (!ElectionsModActive) DoCheckForElection();
+            if (!ElectionsModActive)
+            {
+                DoCheckForElection();
+                // DoCheckForTermReview(); // review disabled — happy with election event
+            }
 
             foreach (var p in Data.ProposedProjects)
                 if (p.Type == ProjectType.Metric && p.GoalType.HasValue)
@@ -148,6 +184,41 @@ namespace CivicVoice.Systems
             Data.ProposedProjects.RemoveAll(p => IsAlreadyAchieved(p));
             if (_timeSystem != null) DoCheckBirthdays(_timeSystem.GetCurrentDateTime());
         }
+
+        // ── Natural Resources ─────────────────────────────────────────────
+        private float GetNaturalResourceValue(string fieldName)
+        {
+            if (_naturalResourcesSystem == null) return 0f;
+            var field = typeof(NaturalResourcesInfoviewUISystem).GetField(fieldName,
+                System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            if (field == null) return 0f;
+            var binding = field.GetValue(_naturalResourcesSystem) as Colossal.UI.Binding.ValueBinding<float>;
+            return binding?.value ?? 0f;
+        }
+
+        public float Oil => GetNaturalResourceValue("m_AvailableOil");
+        public float Ore => GetNaturalResourceValue("m_AvailableOre");
+        public float Forest => GetNaturalResourceValue("m_AvailableForest");
+
+        private (string resourceName, float amount) GetMostAbundantResource(HashSet<string>? exclude = null)
+        {
+            exclude ??= new HashSet<string>();
+            var resources = new (string name, float amount)[]
+            {
+        ("oil", Oil),
+        ("ore", Ore),
+        ("timber", Forest)
+            }.Where(r => !exclude.Contains(r.name)).ToArray();
+
+            if (resources.Length == 0) return ("", 0f);
+
+            float maxAmount = resources.Max(r => r.amount);
+            if (maxAmount <= 0f) return resources[0];
+
+            var candidates = resources.Where(r => r.amount >= maxAmount * 0.5f).ToList();
+            return candidates[_rng.Next(candidates.Count)];
+        }
+
         // ── Candidate details ─────────────────────────────────────────────
         private void DoCheckBirthdays(DateTime now)
         {
@@ -175,7 +246,7 @@ namespace CivicVoice.Systems
                 if (birthday > Data.LastAgeCheckDate && birthday <= now)
                 {
                     c.Age++;
-                    CivicMod.log.Info($"[CivicVoice] {c.Name} turned {c.Age}");
+                    Mod.log.Info($"[CivicVoice] {c.Name} turned {c.Age}");
                 }
             }
 
@@ -196,7 +267,7 @@ namespace CivicVoice.Systems
                 AdultCount = cs.AdultCount;
                 SeniorCount = cs.SeniorCount;
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (household): {ex.Message}"); }
+            catch (Exception ex) { Mod.log.Warn($"Stats update failed (household): {ex.Message}"); }
 
             try
             {
@@ -207,7 +278,7 @@ namespace CivicVoice.Systems
 
                 }
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (city stats): {ex.Message}"); }
+            catch (Exception ex) { Mod.log.Warn($"Stats update failed (city stats): {ex.Message}"); }
 
             try
             {
@@ -220,7 +291,7 @@ namespace CivicVoice.Systems
                 if (_commercialDemandSystem != null)
                     CommercialDemand = _commercialDemandSystem.buildingDemand;
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (demand): {ex.Message}"); }
+            catch (Exception ex) { Mod.log.Warn($"Stats update failed (demand): {ex.Message}"); }
 
 
             try
@@ -232,7 +303,7 @@ namespace CivicVoice.Systems
                 if (capF != null) UniversityCapacity = ((Colossal.UI.Binding.ValueBinding<int>)capF.GetValue(es)).value;
                 if (eligF != null) UniversityEligible = ((Colossal.UI.Binding.ValueBinding<int>)eligF.GetValue(es)).value;
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (university): {ex.Message}"); }
+            catch (Exception ex) { Mod.log.Warn($"Stats update failed (university): {ex.Message}"); }
 
             try
             {
@@ -241,7 +312,7 @@ namespace CivicVoice.Systems
                 var healthF = hs?.GetType().GetField("m_AverageHealth", flags);
                 if (healthF != null) Health = ((Colossal.UI.Binding.ValueBinding<float>)healthF.GetValue(hs)).value;
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (health): {ex.Message}"); }
+            catch (Exception ex) { Mod.log.Warn($"Stats update failed (health): {ex.Message}"); }
 
             try
             {
@@ -256,7 +327,7 @@ namespace CivicVoice.Systems
                     CrimeRate = producers > 0 ? (prob / producers) / 250f : 0f;
                 }
             }
-            catch (Exception ex) { CivicMod.log.Warn($"Stats update failed (crime): {ex.Message}"); }
+            catch (Exception ex) { Mod.log.Warn($"Stats update failed (crime): {ex.Message}"); }
 
         }
 
@@ -411,7 +482,7 @@ namespace CivicVoice.Systems
             Data.ProposedProjects.Add(project);
             int addCooldown = Mod.Settings?.MetricProposalCooldownMonths ?? 2;
             Data.MetricProjectCooldowns[key] = (_timeSystem?.GetCurrentDateTime() ?? DateTime.MinValue).AddDays(addCooldown);
-            CivicMod.log.Info($"[CivicVoice] Metric proposal added: {project.Title} (key: {key})");
+            Mod.log.Info($"[CivicVoice] Metric proposal added: {project.Title} (key: {key})");
             DoNotify($"Citizens are demanding action: \"{project.Title}\"");
         }
 
@@ -447,7 +518,7 @@ namespace CivicVoice.Systems
                 Data.ProposedProjects.Add(p);
                 added++;
             }
-            CivicMod.log.Info($"[CivicVoice] AdHoc proposals added: {added} (mayor specialty: {Data.CurrentMayor?.Specialty})");
+            Mod.log.Info($"[CivicVoice] AdHoc proposals added: {added} (mayor specialty: {Data.CurrentMayor?.Specialty})");
             DoNotify("Citizens have new ideas for the city.");
         }
 
@@ -568,6 +639,10 @@ namespace CivicVoice.Systems
             var pool = DoBuildMajorPool();
             if (UniversityCapacity >= UniversityEligible * 0.5f)
                 pool.RemoveAll(p => p.Title == "Build a university campus");
+            if (Data.CompletedProjects.Any(p => p.Title == "Construct a regional airport hub") ||
+                Data.ActiveProjects.Any(p => p.Title == "Construct a regional airport hub") ||
+                Data.ProposedProjects.Any(p => p.Title == "Construct a regional airport hub"))
+                pool.RemoveAll(p => p.Title == "Construct a regional airport hub");
             DoShuffle(pool);
 
             int needed = MaxProposedMajor - proposedCount - activeCount;
@@ -576,11 +651,25 @@ namespace CivicVoice.Systems
             {
                 if (Data.ProposedProjects.Any(x => x.Title == p.Title)) continue;
                 if (Data.ActiveProjects.Any(x => x.Title == p.Title)) continue;
+                if (p.Description == "PENDING_RESOURCE_PITCH")
+                {
+                    var usedResources = Data.ProposedProjects.Concat(Data.ActiveProjects)
+                        .Where(x => x.Description != null && x.Description.Contains("environmental trade-offs"))
+                        .Select(x => x.Description.Contains("oil") ? "oil" : x.Description.Contains("ore") ? "ore" : x.Description.Contains("timber") ? "timber" : "")
+                        .ToHashSet();
+
+                    var company = DoMakeCompanyName();
+                    var resource = GetMostAbundantResource(usedResources);
+                    if (resource.resourceName == "") continue; // all resources already pitched, skip this proposal entirely
+
+                    p.Title = $"{company} resource investment pitch";
+                    p.Description = $"A private investment firm has approached the city with geological survey data showing significant {resource.resourceName} reserves. They're proposing to fund extraction infrastructure in exchange for development rights. Citizens are divided on the environmental trade-offs.";
+                }
                 DoAssignVotes(p);
                 Data.ProposedProjects.Add(p);
                 added++;
             }
-            CivicMod.log.Info($"[CivicVoice] Major proposals added: {added}");
+            Mod.log.Info($"[CivicVoice] Major proposals added: {added}");
             DoNotify("Citizens are proposing a major city project.");
         }
 
@@ -590,6 +679,12 @@ namespace CivicVoice.Systems
                 Title = "Develop a new town district",
                 Description = "Citizens want to expand the city with an entirely new district. This is a major undertaking that will take a full year.",
                 Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Housing,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 12, ManualCompletion = true },
+            new CivicProject {
+                Title = "Resource investment pitch",
+                Description = "PENDING_RESOURCE_PITCH",
+                Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Economy,
                 GoalType = MetricGoalType.None,
                 DeadlineGameDays = 12, ManualCompletion = true },
             new CivicProject {
@@ -622,9 +717,30 @@ namespace CivicVoice.Systems
                 Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Education,
                 GoalType = MetricGoalType.None,
                 DeadlineGameDays = 12, ManualCompletion = true },
+            new CivicProject {
+                Title = "Construct a regional airport hub",
+                Description = "Business leaders and residents are pushing for a major airport expansion to connect the city to regional and international destinations. A significant infrastructure commitment.",
+                Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Infrastructure,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 12, ManualCompletion = true },
+            new CivicProject {
+                Title = "Launch a city regeneration scheme",
+                Description = "Older districts are falling behind. Citizens want a coordinated effort to revitalise neglected neighbourhoods with new housing, green space, and services.",
+                Tier = ProjectTier.Major, Type = ProjectType.Metric, Category = ProjectCategory.Housing,
+                GoalType = MetricGoalType.None,
+                DeadlineGameDays = 12, ManualCompletion = true },
         };
 
         // ── Vote assignment ───────────────────────────────────────────────
+        private int DoGetProjectWeight(CivicProject p)
+        {
+            return p.Tier switch
+            {
+                ProjectTier.Major => Mod.Settings?.MajorProjectApprovalWeight ?? 3,
+                ProjectTier.MetricTriggered => Mod.Settings?.UrgentProjectApprovalWeight ?? 1,
+                _ => Mod.Settings?.AdHocProjectApprovalWeight ?? 1
+            };
+        }
         private void DoAssignVotes(CivicProject p)
         {
             int eligibleVoters = Math.Max(100, TeenCount + AdultCount + SeniorCount);
@@ -651,7 +767,7 @@ namespace CivicVoice.Systems
 
                 if (p.VotesFor + p.VotesAgainst >= eligible) continue;
 
-                int newVotes = _rng.Next(1, 4);
+                int newVotes = Math.Max(1, (int)(eligible * 0.003f) + _rng.Next(1, 4));
                 float lean = p.Category switch
                 {
                     ProjectCategory.Healthcare => 0.60f,
@@ -697,8 +813,7 @@ namespace CivicVoice.Systems
                 _ => 0.05f
             };
             return Math.Max(0.35f, Math.Min(0.90f, tierBase + categoryMod + (float)(_rng.NextDouble() - 0.35f) * 0.15f));
-        }
-        // 
+        } 
         // ── Project actions ───────────────────────────────────────────────
         public bool AcceptProject(string projectId)
         {
@@ -711,7 +826,8 @@ namespace CivicVoice.Systems
 
             if (Data.ActiveProjects.Count(x => x.Tier == p.Tier) >= maxForTier)
             {
-                DoNotify($"You already have the maximum active {p.Tier} projects.");
+                string tierLabel = p.Tier == ProjectTier.MetricTriggered ? "Urgent" : p.Tier.ToString();
+                DoNotify($"You already have the maximum active {tierLabel} projects.");
                 return false;
             }
 
@@ -720,7 +836,7 @@ namespace CivicVoice.Systems
             if (_timeSystem != null) p.StartDate = _timeSystem.GetCurrentDateTime();
             Data.ProposedProjects.Remove(p);
             Data.ActiveProjects.Add(p);
-            CivicMod.log.Info($"[CivicVoice] Project accepted: {p.Title} (tier: {p.Tier})");
+            Mod.log.Info($"[CivicVoice] Project accepted: {p.Title} (tier: {p.Tier})");
             DoNotify($"Project accepted: \"{p.Title}\"");
             return true;
         }
@@ -731,7 +847,7 @@ namespace CivicVoice.Systems
             if (p == null) return;
             p.Status = ProjectStatus.Rejected;
             Data.ProposedProjects.Remove(p);
-            CivicMod.log.Info($"[CivicVoice] Project rejected: {p.Title}");
+            Mod.log.Info($"[CivicVoice] Project rejected: {p.Title}");
 
             if (p.Tier == ProjectTier.MetricTriggered && _timeSystem != null)
             {
@@ -741,7 +857,7 @@ namespace CivicVoice.Systems
                     int cooldownDays = Mod.Settings?.RejectedCooldownMonths ?? 6;
                     DateTime now = _timeSystem.GetCurrentDateTime();
                     Data.MetricProjectCooldowns[key] = now.AddDays(cooldownDays);
-                    CivicMod.log.Info($"[CivicVoice] Cooldown set for {key} until {now.AddDays(cooldownDays)}");
+                    Mod.log.Info($"[CivicVoice] Cooldown set for {key} until {now.AddDays(cooldownDays)}");
                     DoNotify($"Proposal rejected: \"{p.Title}\".");
                 }
             }
@@ -758,8 +874,8 @@ namespace CivicVoice.Systems
             if (p == null) return;
             Data.ActiveProjects.Remove(p);
             Data.TotalProjectsAbandoned++;
-            Data.TermProjectsFailed++;
-            CivicMod.log.Info($"[CivicVoice] Project abandoned: {p.Title}");
+            Data.TermProjectsAbandoned += 1;
+            Mod.log.Info($"[CivicVoice] Project abandoned: {p.Title}");
             DoNotify($"Project abandoned: \"{p.Title}\".");
         }
 
@@ -768,13 +884,13 @@ namespace CivicVoice.Systems
             var p = Data.ActiveProjects.FirstOrDefault(x => x.Id == projectId && x.ManualCompletion);
             if (p == null) return;
             p.MarkedComplete = true;
-            CivicMod.log.Info($"[CivicVoice] Major project marked complete: {p.Title}");
+            Mod.log.Info($"[CivicVoice] Major project marked complete: {p.Title}");
         }
 
         public void TriggerForceElection()
         {
             _forceElection = true;
-            CivicMod.log.Info("[CivicVoice] Force election triggered.");
+            Mod.log.Info("[CivicVoice] Force election triggered.");
         }
 
         // ── Progress tracking ─────────────────────────────────────────────
@@ -826,8 +942,8 @@ namespace CivicVoice.Systems
             Data.ActiveProjects.Remove(p);
             Data.CompletedProjects.Add(p);
             Data.TotalProjectsCompleted++;
-            Data.TermProjectsCompleted++;
-            CivicMod.log.Info($"[CivicVoice] Project completed: {p.Title}");
+            Data.TermProjectsCompleted += 1;
+            Mod.log.Info($"[CivicVoice] Project completed: {p.Title}");
             DoNotify($"Project complete: \"{p.Title}\"!");
         }
 
@@ -836,8 +952,8 @@ namespace CivicVoice.Systems
             p.Status = ProjectStatus.Failed;
             Data.ActiveProjects.Remove(p);
             Data.TotalProjectsFailed++;
-            Data.TermProjectsFailed++;
-            CivicMod.log.Info($"[CivicVoice] Project failed: {p.Title}");
+            Data.TermProjectsFailed += 1;
+            Mod.log.Info($"[CivicVoice] Project failed: {p.Title}");
             DoNotify($"Project failed: \"{p.Title}\".");
 
             if (p.Tier == ProjectTier.MetricTriggered && _timeSystem != null)
@@ -847,7 +963,7 @@ namespace CivicVoice.Systems
                 {
                     DateTime now = _timeSystem.GetCurrentDateTime();
                     Data.MetricProjectCooldowns[key] = now.AddDays(3);
-                    CivicMod.log.Info($"[CivicVoice] Cooldown set for {key} until {now.AddDays(3)}");
+                    Mod.log.Info($"[CivicVoice] Cooldown set for {key} until {now.AddDays(3)}");
                 }
             }
 
@@ -924,18 +1040,23 @@ namespace CivicVoice.Systems
 
                 if (Data.ElectionStartDate != DateTime.MinValue && (now - Data.ElectionStartDate).TotalDays >= 1)
                 {
+                    var previousMayor = Data.CurrentMayor;
                     var winner = Data.CurrentElection.Candidates.OrderByDescending(c => c.Votes).First();
+                    DoSnapshotElection(Data.CurrentElection);
                     Data.CurrentElection.Winner = winner;
                     Data.CurrentElection.IsActive = false;
                     int electionFreq = Mod.Settings?.ElectionFrequencyMonths ?? 12;
                     Data.NextElectionDate = now.AddDays(electionFreq);
-                    CivicMod.log.Info($"[CivicVoice] Election won by: {winner.Name} ({winner.PartyName})");
+                    Mod.log.Info($"[CivicVoice] Election won by: {winner.Name} ({winner.PartyName})");
                     DoNotify($"{winner.Name} ({winner.PartyName}) has won the election!");
                     winner.TermsServed++;
                     Data.CurrentMayor = winner;
                     Data.TermProjectsCompleted = 0;
                     Data.TermProjectsFailed = 0;
+                    Data.TermProjectsAbandoned = 0;
+                    Data.TermReviewIssued = false;
                     Data.MayorElectedDate = now;
+                    DoIssueNewspaper(NewspaperEventType.Election, previousMayor);
                 }
                 return;
             }
@@ -951,7 +1072,7 @@ namespace CivicVoice.Systems
                 var fc1 = Data.CurrentElection.Candidates[0].Name;
                 var fc2 = Data.CurrentElection.Candidates[1].Name;
                 var fc3 = Data.CurrentElection.Candidates[2].Name;
-                CivicMod.log.Info($"[CivicVoice] Forced election started: {fc1} vs {fc2} vs {fc3}");
+                Mod.log.Info($"[CivicVoice] Forced election started: {fc1} vs {fc2} vs {fc3}");
                 DoNotify($"A special election has been called! {fc1} vs {fc2} vs {fc3}");
                 return;
             }
@@ -962,7 +1083,7 @@ namespace CivicVoice.Systems
                 if (!Data.FirstElectionAnnounced)
                 {
                     Data.FirstElectionAnnounced = true;
-                    CivicMod.log.Info("[CivicVoice] First election triggered.");
+                    Mod.log.Info("[CivicVoice] First election triggered.");
                     DoNotify($"Your city has reached {minPop} citizens! The first mayoral election has begun!");
                 }
             }
@@ -977,7 +1098,7 @@ namespace CivicVoice.Systems
             var c1 = Data.CurrentElection.Candidates[0].Name;
             var c2 = Data.CurrentElection.Candidates[1].Name;
             var c3 = Data.CurrentElection.Candidates[2].Name;
-            CivicMod.log.Info($"[CivicVoice] Election started: {c1} vs {c2} vs {c3}");
+            Mod.log.Info($"[CivicVoice] Election started: {c1} vs {c2} vs {c3}");
             DoNotify($"Election time! {c1} vs {c2} vs {c3}");
         }
 
@@ -986,30 +1107,36 @@ namespace CivicVoice.Systems
             if (Data.CurrentElection == null || !Data.CurrentElection.IsActive || Data.CurrentElection.HasVoted) return;
             Data.CurrentElection.HasVoted = true;
             float influence = (Mod.Settings?.EndorsementInfluencePercent ?? 5) / 100f;
+            int totalVotes = Data.CurrentElection.Candidates.Sum(c => c.Votes);
             foreach (var c in Data.CurrentElection.Candidates)
             {
                 if (c.Name == candidateName)
-                    c.Votes += Math.Max(1, (int)(Population * influence));
+                    c.Votes += Math.Max(1, (int)(totalVotes * influence));
             }
-            CivicMod.log.Info($"[CivicVoice] Vote cast for: {candidateName}");
+            Mod.log.Info($"[CivicVoice] Vote cast for: {candidateName}");
             DoNotify($"You have endorsed {candidateName}. The election will conclude at the end of the voting period.");
         }
 
         public void ConcludeElection()
         {
             if (Data.CurrentElection == null || !Data.CurrentElection.IsActive) return;
+            var previousMayor = Data.CurrentMayor;
             var winner = Data.CurrentElection.Candidates.OrderByDescending(c => c.Votes).First();
+            DoSnapshotElection(Data.CurrentElection);
             Data.CurrentElection.Winner = winner;
             Data.CurrentElection.IsActive = false;
             winner.TermsServed++;
             Data.CurrentMayor = winner;
             Data.TermProjectsCompleted = 0;
             Data.TermProjectsFailed = 0;
+            Data.TermProjectsAbandoned = 0;
+            Data.TermReviewIssued = false;
             Data.MayorElectedDate = GetCurrentGameDate();
             int electionFreq = Mod.Settings?.ElectionFrequencyMonths ?? 12;
             Data.NextElectionDate = GetCurrentGameDate().AddDays(electionFreq);
-            CivicMod.log.Info($"[CivicVoice] Election concluded manually: {winner.Name}");
+            Mod.log.Info($"[CivicVoice] Election concluded manually: {winner.Name}");
             DoNotify($"{winner.Name} ({winner.PartyName}) has won the election!");
+            DoIssueNewspaper(NewspaperEventType.Election, previousMayor);
         }
 
         public DateTime GetCurrentGameDate()
@@ -1022,7 +1149,7 @@ namespace CivicVoice.Systems
         private int DoGetApprovalScore()
         {
             return Math.Max(0, Math.Min(100,
-                (Data.TermProjectsCompleted * 8) - (Data.TermProjectsFailed * 12) + 50));
+                (Data.TermProjectsCompleted * 8) - (Data.TermProjectsFailed * 12) - (Data.TermProjectsAbandoned * 12) + 50));
         }
 
         private MayorElection DoGenerateElection()
@@ -1030,16 +1157,22 @@ namespace CivicVoice.Systems
             var allSpecialties = (MayorSpecialty[])Enum.GetValues(typeof(MayorSpecialty));
             DoShuffle(allSpecialties);
 
-            int totalVoters = Math.Max(10, TeenCount + AdultCount + SeniorCount);
+            int eligibleVoters = Math.Max(10, TeenCount + AdultCount + SeniorCount);
             var candidates = new List<MayorCandidate>();
 
             // Check if incumbent can run
             bool incumbentRuns = Data.CurrentMayor != null && Data.CurrentMayor.TermsServed < 2;
 
+            // Turnout: 50–75% base, nudged by approval (high approval → more engagement)
+            int approval = DoGetApprovalScore();
+            float approvalNudge = (approval - 50) / 100f * 0.10f; // -5% to +5%
+            float turnoutBase = 0.50f + (float)_rng.NextDouble() * 0.25f;
+            float turnoutFraction = Math.Max(0.35f, Math.Min(0.85f, turnoutBase + approvalNudge));
+            int totalVoters = Math.Max(5, (int)(eligibleVoters * turnoutFraction));
+
             if (incumbentRuns)
             {
                 // Incumbent runs with approval-weighted votes
-                int approval = DoGetApprovalScore();
                 float incumbentShare = approval >= 70 ? 0.45f
                                      : approval >= 40 ? 0.33f
                                      : 0.20f;
@@ -1080,28 +1213,32 @@ namespace CivicVoice.Systems
                 }
 
                 // Distribute votes randomly across three
-                float share1 = 0.25f + (float)_rng.NextDouble() * 0.25f;
-                float share2 = 0.25f + (float)_rng.NextDouble() * 0.25f;
-                if (share1 + share2 > 0.9f) share2 = 0.9f - share1;
+                float share1 = 0.25f + (float)_rng.NextDouble() * 0.30f;
+                float share2 = 0.20f + (float)_rng.NextDouble() * 0.25f;
+                if (share1 + share2 > 0.90f) share2 = 0.90f - share1;
                 candidates[0].Votes = (int)(totalVoters * share1);
                 candidates[1].Votes = (int)(totalVoters * share2);
-                candidates[2].Votes = totalVoters - candidates[0].Votes - candidates[1].Votes;
+                candidates[2].Votes = Math.Max(0, totalVoters - candidates[0].Votes - candidates[1].Votes);
             }
 
             DoShuffle(candidates);
             return new MayorElection { Candidates = candidates };
         }
 
-        private MayorCandidate DoMakeCandidate(MayorSpecialty s) => new MayorCandidate
+        private MayorCandidate DoMakeCandidate(MayorSpecialty s)
         {
-            Name = s_FirstNames[_rng.Next(s_FirstNames.Length)] + " " + s_LastNames[_rng.Next(s_LastNames.Length)],
-            Age = _rng.Next(35, 68),
-            Specialty = s,
-            PartyName = s_Parties[_rng.Next(s_Parties.Length)],
-            Slogan = DoGetSlogan(s),
-            BirthdayMonth = _rng.Next(1, 13),
-            BirthdayDay = _rng.Next(1, 29)
-        };
+            int month = _rng.Next(1, 13);
+            return new MayorCandidate
+            {
+                Name = s_FirstNames[_rng.Next(s_FirstNames.Length)] + " " + s_LastNames[_rng.Next(s_LastNames.Length)],
+                Age = _rng.Next(35, 68),
+                Specialty = s,
+                PartyName = s_Parties[_rng.Next(s_Parties.Length)],
+                Slogan = DoGetSlogan(s),
+                BirthdayMonth = month,
+                BirthdayDay = _rng.Next(1, DateTime.DaysInMonth(2000, month) + 1)
+            };
+        }
 
         private static string DoGetSlogan(MayorSpecialty s) => s switch
         {
@@ -1114,18 +1251,364 @@ namespace CivicVoice.Systems
             _ => "Building a better city together."
         };
 
+        private string DoMakeCompanyName()
+        {
+            return NewspaperContent.CompanyPrefixes[_rng.Next(NewspaperContent.CompanyPrefixes.Length)] + " " +
+                   NewspaperContent.CompanySuffixes[_rng.Next(NewspaperContent.CompanySuffixes.Length)];
+        }
+
+        private string DoMakeShopName()      => NewspaperContent.ShopNames[_rng.Next(NewspaperContent.ShopNames.Length)];
+        private string DoMakeCafeName()      => NewspaperContent.CafeNames[_rng.Next(NewspaperContent.CafeNames.Length)];
+        private string DoMakeRestaurantName()=> NewspaperContent.RestaurantNames[_rng.Next(NewspaperContent.RestaurantNames.Length)];
+        private string DoMakeSalonName()     => NewspaperContent.SalonNames[_rng.Next(NewspaperContent.SalonNames.Length)];
+        private string DoMakeHardwareName()  => NewspaperContent.HardwareNames[_rng.Next(NewspaperContent.HardwareNames.Length)];
+        private string DoMakeDeliName()      => NewspaperContent.DeliNames[_rng.Next(NewspaperContent.DeliNames.Length)];
+        private string DoMakeGymName()       => NewspaperContent.GymNames[_rng.Next(NewspaperContent.GymNames.Length)];
+
+        // ── Newspaper: tiers ──────────────────────────────────────────────
+        private enum ElectionTier { Landslide, Close, IncumbentDefeat }
+        // private enum ReviewTier { Good, Mixed, Poor } // review disabled
+
+        private ElectionTier DoGetElectionTier(float winnerPercent, float runnerUpPercent, bool incumbentLost)
+        {
+            if (incumbentLost) return ElectionTier.IncumbentDefeat;
+            float margin = winnerPercent - runnerUpPercent;
+            return margin >= 15f ? ElectionTier.Landslide : ElectionTier.Close;
+        }
+
+        // review disabled — DoGetReviewTier removed
+
+        // ── Newspaper: headline pools ─────────────────────────────────────
+        private static readonly string[] s_HeraldElectionLandslide = {
+            "Voters hand {winner} a commanding mandate",
+            "{winner} storms to victory in emphatic result",
+            "{winner} wins city hall with a dominant share of the vote",
+        };
+        private static readonly string[] s_HeraldElectionClose = {
+            "{winner} edges out rivals in nail-biting finish",
+            "Narrow victory for {winner} after a long night",
+            "{winner} elected mayor by the slimmest of margins",
+        };
+        private static readonly string[] s_HeraldElectionIncumbentDefeat = {
+            "Voters oust {incumbent} and back {winner}",
+            "Change at city hall as {winner} defeats {incumbent}",
+            "{incumbent} loses seat as {winner} takes office",
+        };
+
+        private static readonly string[] s_UproarElectionLandslide = {
+            "{winner} wins so big it's almost embarrassing",
+            "Did anyone tell {winner} it was meant to be close?",
+            "Election over before it started — {winner} romps home",
+        };
+        private static readonly string[] s_UproarElectionClose = {
+            "{winner} wins by a margin thinner than city hall's coffee",
+            "Nail-biter ends with {winner} just about on top",
+            "It went to the wire and {winner} scraped through",
+        };
+        private static readonly string[] s_UproarElectionIncumbentDefeat = {
+            "{incumbent} packs desk, {winner} moves straight in",
+            "Voters say thanks but no thanks to {incumbent}",
+            "{winner} shows {incumbent} the door in shock result",
+        };
+
+        private static readonly string[] s_PulseElectionLandslide = {
+            "{winner} elected mayor in decisive result",
+            "{winner} secures a strong mandate from city voters",
+            "Residents back {winner} by a wide margin",
+        };
+        private static readonly string[] s_PulseElectionClose = {
+            "{winner} elected mayor after tight contest",
+            "Close race ends with {winner} narrowly ahead",
+            "{winner} wins majority in night of counting",
+        };
+        private static readonly string[] s_PulseElectionIncumbentDefeat = {
+            "{winner} unseats incumbent {incumbent}",
+            "Voters choose {winner} over sitting mayor {incumbent}",
+            "{winner} defeats {incumbent} to claim the mayoralty",
+        };
+
+        // ── Splash pools (line1 | line2, separated by "|") ──────────────
+        private static readonly string[] s_HeraldSplashLandslide = {
+            "{WINNERSURNAME} ELECTED|BY WIDE MARGIN",
+            "A MANDATE FOR|{WINNERSURNAME}",
+            "{WINNERSURNAME} WINS|IN DOMINANT FASHION",
+        };
+        private static readonly string[] s_HeraldSplashClose = {
+            "{WINNERSURNAME} WINS|IN NARROW CONTEST",
+            "CLOSE RACE ENDS|FOR {WINNERSURNAME}",
+            "{WINNERSURNAME} ELECTED|BY SLIM MARGIN",
+        };
+        private static readonly string[] s_HeraldSplashIncumbentDefeat = {
+            "{INCUMBENTSURNAME} OUSTED|{WINNERSURNAME} ELECTED",
+            "CHANGE AT|CITY HALL",
+            "{WINNERSURNAME} DEFEATS|{INCUMBENTSURNAME}",
+        };
+
+        private static readonly string[] s_PulseSplashLandslide = {
+            "DECISIVE WIN|FOR {WINNERSURNAME}",
+            "{WINNERSURNAME}|SWEEPS TO POWER",
+            "CITY BACKS|{WINNERSURNAME}",
+        };
+        private static readonly string[] s_PulseSplashClose = {
+            "{WINNERSURNAME}|NARROWLY WINS",
+            "A CLOSE RACE|{WINNERSURNAME} AHEAD",
+            "TIGHT CONTEST|{WINNERSURNAME} PREVAILS",
+        };
+        private static readonly string[] s_PulseSplashIncumbentDefeat = {
+            "VOTERS CHOOSE|CHANGE",
+            "{WINNERSURNAME}|UNSEATS {INCUMBENTSURNAME}",
+            "NEW MAYOR|{WINNERSURNAME} ELECTED",
+        };
+
+        private static readonly string[] s_UproarSplashLandslide = {
+            "{WINNERSURNAME} ROMPS!|CITY BACKS {WINNERSURNAME}",
+            "DOMINANT!|{WINNERSURNAME} TAKES IT",
+            "{WINNERSURNAME} WINS BIG|LANDSLIDE VERDICT",
+        };
+        private static readonly string[] s_UproarSplashClose = {
+            "{WINNERSURNAME}|JUST AHEAD",
+            "TOO CLOSE!|{WINNERSURNAME} SQUEAKS THROUGH",
+            "WHAT A NIGHT!|{WINNERSURNAME} INCHES IT",
+        };
+        private static readonly string[] s_UproarSplashIncumbentDefeat = {
+            "{INCUMBENTSURNAME} OUT!|{WINNERSURNAME} STUNNER",
+            "SHOCK RESULT!|{INCUMBENTSURNAME} FALLS",
+            "{WINNERSURNAME} IN!|{INCUMBENTSURNAME} OUSTED",
+        };
+
+        // review headline pools removed — review disabled
+
+
+        private static string Surname(string fullName)
+        {
+            var parts = fullName.Trim().Split(' ');
+            return parts[parts.Length - 1];
+        }
+
+        private string ResolveTemplate(string template, Dictionary<string, string> vars)
+        {
+            string result = template;
+            foreach (var kv in vars)
+                result = result.Replace("{" + kv.Key + "}", kv.Value);
+            return result;
+        }
+
+        private string DoPickBeefyFiller()
+        {
+            return DoResolveShopPlaceholders(NewspaperContent.BeefyFillerPool[_rng.Next(NewspaperContent.BeefyFillerPool.Length)]);
+        }
+
+        private string DoPickFiller()
+        {
+            var available = Enumerable.Range(0, NewspaperContent.FillerPool.Length)
+                .Where(i => !Data.RecentFillerIndices.Contains(i))
+                .ToList();
+
+            if (available.Count == 0)
+                available = Enumerable.Range(0, NewspaperContent.FillerPool.Length).ToList();
+
+            int chosen = available[_rng.Next(available.Count)];
+
+            Data.RecentFillerIndices.Add(chosen);
+            while (Data.RecentFillerIndices.Count > 12)
+                Data.RecentFillerIndices.RemoveAt(0);
+
+            return DoResolveShopPlaceholders(NewspaperContent.FillerPool[chosen]);
+        }
+
+        private string DoResolveShopPlaceholders(string text)
+        {
+            if (!text.Contains("{shop") && !text.Contains("{company}") && !text.Contains("{cafe}") &&
+                !text.Contains("{restaurant}") && !text.Contains("{salon}") && !text.Contains("{hardware}") &&
+                !text.Contains("{deli}") && !text.Contains("{gym}"))
+                return text;
+
+            return ResolveTemplate(text, new Dictionary<string, string>
+            {
+                ["shop"]       = DoMakeShopName(),
+                ["company"]    = DoMakeCompanyName(),
+                ["cafe"]       = DoMakeCafeName(),
+                ["restaurant"] = DoMakeRestaurantName(),
+                ["salon"]      = DoMakeSalonName(),
+                ["hardware"]   = DoMakeHardwareName(),
+                ["deli"]       = DoMakeDeliName(),
+                ["gym"]        = DoMakeGymName(),
+            });
+        }
+
+        private string[] DoPickTeasers()
+        {
+            var pool = Enumerable.Range(0, NewspaperContent.TeaserPool.Length).ToList();
+            var result = new string[4];
+            for (int i = 0; i < 4; i++)
+            {
+                int idx = _rng.Next(pool.Count);
+                result[i] = DoResolveShopPlaceholders(NewspaperContent.TeaserPool[pool[idx]]);
+                pool.RemoveAt(idx);
+            }
+            return result;
+        }
+
+        // ── Newspaper: style + headline pool selection ────────────────────
+        private static readonly string[] s_StylesByWeight = { "herald", "herald", "uproar", "uproar", "pulse", "pulse" };
+
+        private string DoPickStyle() => s_StylesByWeight[_rng.Next(s_StylesByWeight.Length)];
+
+        private string[] DoGetElectionHeadlinePool(string style, ElectionTier tier) => (style, tier) switch
+        {
+            ("herald", ElectionTier.Landslide) => s_HeraldElectionLandslide,
+            ("herald", ElectionTier.Close) => s_HeraldElectionClose,
+            ("herald", ElectionTier.IncumbentDefeat) => s_HeraldElectionIncumbentDefeat,
+            ("uproar", ElectionTier.Landslide) => s_UproarElectionLandslide,
+            ("uproar", ElectionTier.Close) => s_UproarElectionClose,
+            ("uproar", ElectionTier.IncumbentDefeat) => s_UproarElectionIncumbentDefeat,
+            ("pulse", ElectionTier.Landslide) => s_PulseElectionLandslide,
+            ("pulse", ElectionTier.Close) => s_PulseElectionClose,
+            _ => s_PulseElectionIncumbentDefeat,
+        };
+
+        // DoGetReviewHeadlinePool removed — review disabled
+
+        // ── Newspaper: snapshot + payload builders ────────────────────────
+        private void DoSnapshotElection(MayorElection election)
+        {
+            int total = election.Candidates.Sum(c => c.Votes);
+            int eligible = Math.Max(10, TeenCount + AdultCount + SeniorCount);
+            election.SnapshotTotalVotes = total;
+            election.SnapshotTurnoutPercent = eligible > 0 ? Math.Min(100f, (total / (float)eligible) * 100f) : 0f;
+            foreach (var c in election.Candidates)
+                c.SnapshotVotePercent = total > 0 ? (c.Votes / (float)total) * 100f : 0f;
+        }
+
+        // ── Newspaper: payload builders ───────────────────────────────────
+        private CivicVoice.Models.NewspaperPayload DoBuildElectionPayload(MayorElection election, MayorCandidate winner, MayorCandidate? previousMayor)
+        {
+            string style = DoPickStyle();
+            string cityName = World.GetOrCreateSystemManaged<Game.City.CityConfigurationSystem>().cityName;
+
+            var ordered = election.Candidates.OrderByDescending(c => c.Votes).ToList();
+            int eligibleVoters = Math.Max(10, TeenCount + AdultCount + SeniorCount);
+
+            Mod.log.Info($"[CivicVoice] DoBuildElectionPayload — totalVotes={election.SnapshotTotalVotes}, eligible={eligibleVoters}, candidates: {string.Join(", ", ordered.Select(c => $"{c.Name}={c.SnapshotVotePercent:F1}%"))}");
+
+            var challengers = ordered.Where(c => c.Name != winner.Name).ToList();
+
+            var winnerPct = winner.SnapshotVotePercent;
+            var runnerUp = challengers.FirstOrDefault();
+            var runnerUpPct = runnerUp?.SnapshotVotePercent ?? 0f;
+
+            bool incumbentLost = previousMayor != null && previousMayor.Name != winner.Name;
+            var tier = DoGetElectionTier(winnerPct, runnerUpPct, incumbentLost);
+
+            var pool = DoGetElectionHeadlinePool(style, tier);
+            string winnerSurname = Surname(winner.Name).ToUpper();
+            string incumbentSurname = previousMayor != null ? Surname(previousMayor.Name).ToUpper() : "";
+            var vars = new Dictionary<string, string>
+            {
+                ["winner"] = winner.Name,
+                ["incumbent"] = previousMayor?.Name ?? "",
+                ["WINNERSURNAME"] = winnerSurname,
+                ["INCUMBENTSURNAME"] = incumbentSurname,
+            };
+            string headline = ResolveTemplate(pool[_rng.Next(pool.Length)], vars);
+
+            string[] splashPool = style == "herald"
+                ? (tier == ElectionTier.Landslide ? s_HeraldSplashLandslide
+                 : tier == ElectionTier.Close     ? s_HeraldSplashClose
+                 :                                  s_HeraldSplashIncumbentDefeat)
+                : style == "uproar"
+                ? (tier == ElectionTier.Landslide ? s_UproarSplashLandslide
+                 : tier == ElectionTier.Close     ? s_UproarSplashClose
+                 :                                  s_UproarSplashIncumbentDefeat)
+                : (tier == ElectionTier.Landslide ? s_PulseSplashLandslide
+                 : tier == ElectionTier.Close     ? s_PulseSplashClose
+                 :                                  s_PulseSplashIncumbentDefeat);
+            string rawSplash = ResolveTemplate(splashPool[_rng.Next(splashPool.Length)], vars);
+            var splashParts = rawSplash.Split('|');
+            string splashLine1 = splashParts.Length > 0 ? splashParts[0] : "";
+            string splashLine2 = splashParts.Length > 1 ? splashParts[1] : "";
+
+            var content = new CivicVoice.Models.NewspaperElectionContent
+            {
+                CityName = cityName,
+                Winner = new CivicVoice.Models.NewspaperCandidate
+                {
+                    Name = winner.Name,
+                    Age = winner.Age,
+                    Party = winner.PartyName,
+                    VotePercent = winnerPct,
+                    IsWinner = true,
+                },
+                Challengers = challengers
+                    .Select(c => new CivicVoice.Models.NewspaperCandidate
+                    {
+                        Name = c.Name,
+                        Age = c.Age,
+                        Party = c.PartyName,
+                        VotePercent = c.SnapshotVotePercent,
+                        IsWinner = false,
+                    })
+                    .ToList(),
+                TurnoutPercent = election.SnapshotTurnoutPercent,
+                EligibleVoters = eligibleVoters,
+            };
+
+            return new CivicVoice.Models.NewspaperPayload
+            {
+                Style = style,
+                EventType = "election",
+                Headline = headline,
+                SplashLine1 = splashLine1,
+                SplashLine2 = splashLine2,
+                Quote = ResolveTemplate(NewspaperContent.WinnerQuotePool[_rng.Next(NewspaperContent.WinnerQuotePool.Length)], vars),
+                FillerText = DoPickFiller(),
+                FillerText2 = DoPickBeefyFiller(),
+                Teasers = DoPickTeasers(),
+                ElectionContent = content,
+            };
+        }
+
+        // DoBuildReviewPayload removed — review disabled
+
+        public void DoIssueNewspaper(CivicVoice.Models.NewspaperEventType eventType, MayorCandidate? previousMayor = null)
+        {
+            CivicVoice.Models.NewspaperPayload? payload = null;
+
+            if (eventType == CivicVoice.Models.NewspaperEventType.Election && Data.CurrentElection?.Winner != null)
+                payload = DoBuildElectionPayload(Data.CurrentElection, Data.CurrentElection.Winner, previousMayor);
+            // else if (eventType == CivicVoice.Models.NewspaperEventType.Review && Data.CurrentMayor != null)
+            //     payload = DoBuildReviewPayload(Data.CurrentMayor); // review disabled
+
+            if (payload == null)
+            {
+                Mod.log.Warn("[CivicVoice] DoIssueNewspaper called but required data was missing — skipped.");
+                return;
+            }
+
+            Data.PendingNewspaper = payload;
+            Mod.log.Info($"[CivicVoice] Newspaper issued: {payload.Style} / {payload.EventType} — \"{payload.Headline}\"");
+        }
+
+        public void CloseNewspaper()
+        {
+            Mod.log.Info("[CivicVoice] CloseNewspaper trigger received.");
+            Data.PendingNewspaper = null;
+        }
+
+        // DoCheckForTermReview removed — review disabled
+
         // ── Serialization ─────────────────────────────────────────────────
         public void Serialize<TWriter>(TWriter writer) where TWriter : IWriter
         {
             try
             {
                 writer.Write(JsonConvert.SerializeObject(Data, Formatting.None));
-                CivicMod.log.Info("[CivicVoice] Data serialized.");
+                Mod.log.Info("[CivicVoice] Data serialized.");
             }
             catch (Exception ex)
             {
                 writer.Write("");
-                CivicMod.log.Warn($"[CivicVoice] Serialize failed: {ex.Message}");
+                Mod.log.Warn($"[CivicVoice] Serialize failed: {ex.Message}");
             }
         }
 
@@ -1143,18 +1626,19 @@ namespace CivicVoice.Systems
                         ObjectCreationHandling = ObjectCreationHandling.Replace
                     };
                     Data = JsonConvert.DeserializeObject<CivicVoiceSaveData>(json, settings) ?? new CivicVoiceSaveData();
+                    Data.PendingNewspaper = null;
                     foreach (var p in Data.ProposedProjects.Where(p => p.Tier == ProjectTier.AdHoc && p.Title != "Develop a new shopping strip" && p.Title != "Build a new suburb"))
                         p.ManualCompletion = true;
                     foreach (var p in Data.ActiveProjects.Where(p => p.Tier == ProjectTier.AdHoc && p.Title != "Develop a new shopping strip" && p.Title != "Build a new suburb"))
                         p.ManualCompletion = true;
                     _lastTickDay = Data.LastTickDay;
-                    CivicMod.log.Info($"[CivicVoice] Deserialized. Projects: {Data.ProposedProjects.Count} proposed, {Data.ActiveProjects.Count} active. Mayor: {Data.CurrentMayor?.Name ?? "None"}");
+                    Mod.log.Info($"[CivicVoice] Deserialized. Projects: {Data.ProposedProjects.Count} proposed, {Data.ActiveProjects.Count} active. Mayor: {Data.CurrentMayor?.Name ?? "None"}");
                 }
                 _loaded = true;
             }
             catch (Exception ex)
             {
-                CivicMod.log.Warn($"[CivicVoice] Deserialize failed: {ex.Message}");
+                Mod.log.Warn($"[CivicVoice] Deserialize failed: {ex.Message}");
                 Data = new CivicVoiceSaveData();
                 _loaded = true;
             }
@@ -1165,14 +1649,14 @@ namespace CivicVoice.Systems
             Data = new CivicVoiceSaveData();
             _lastTickDay = -1;
             _loaded = true;
-            CivicMod.log.Info("[CivicVoice] SetDefaults called — new city.");
+            Mod.log.Info("[CivicVoice] SetDefaults called — new city.");
         }
 
         // ── Helpers ───────────────────────────────────────────────────────
         private void DoNotify(string msg)
         {
             Notifications.Add(msg);
-            CivicMod.log.Info($"[CivicVoice] {msg}");
+            Mod.log.Info($"[CivicVoice] {msg}");
         }
 
         private static void DoShuffle<T>(T[] arr)

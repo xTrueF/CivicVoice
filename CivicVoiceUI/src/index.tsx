@@ -1,8 +1,11 @@
-﻿import { ModRegistrar } from "cs2/modding";
+﻿import "./fonts/fonts.css";
+import { ModRegistrar } from "cs2/modding";
 import { FloatingButton, Tooltip } from "cs2/ui";
-import { useState, useRef } from "react";
-import { bindValue, useValue } from "cs2/api";
+import { useState, useRef, useEffect } from "react";
+import { bindValue, useValue, trigger } from "cs2/api";
 import { CivicVoicePanel, CivicVoiceToasts } from "./mods/civic-voice-panel";
+import { NewspaperContent, newspaper$ } from "./mods/newspaper/NewspaperHost";
+import { NewspaperPayloadActive } from "./mods/newspaper/newspaper-data";
 import ballotIcon from "./CIVIC VOICE short logo transparent.png";
 
 const pulseStyle = `
@@ -17,6 +20,27 @@ const pulseStyle = `
 const useUniversalModMenu$ = bindValue<boolean>("civicvoice", "useUniversalModMenu", false);
 const hasElection$ = bindValue<boolean>("civicvoice", "hasElection", false);
 const proposed$ = bindValue<any[]>("civicvoice", "proposed", []);
+
+// Newspaper — visibility is pure local state, no trigger needed for close
+let globalSetNewspaperVisible: ((v: boolean) => void) | null = null;
+
+const NewspaperPanelHost = () => {
+    const payload = useValue(newspaper$);
+    const [visible, setVisible] = useState(false);
+    globalSetNewspaperVisible = setVisible;
+
+    useEffect(() => {
+        if (payload.hasNewspaper) setVisible(true);
+    }, [payload.hasNewspaper]);
+
+    const onClose = () => {
+        setVisible(false);
+        trigger("civicvoice", "closeNewspaper");
+    };
+
+    if (!visible || !payload.hasNewspaper) return null;
+    return <NewspaperContent payload={payload as NewspaperPayloadActive} onClose={onClose} />;
+};
 
 let globalSetPanelVisible: ((v: boolean) => void) | null = null;
 let globalSetToastPanelOpen: ((v: boolean) => void) | null = null;
@@ -70,6 +94,7 @@ export const register: ModRegistrar = (moduleRegistry) => {
     moduleRegistry.append("UniversalModMenu", CivicVoiceUniversalMenu);
     moduleRegistry.append("GameTopLeft", CivicVoicePanelHost);
     moduleRegistry.append("GameTopLeft", CivicVoiceToastHost);
+    moduleRegistry.append("GameTopLeft", NewspaperPanelHost);
 };
 
 export default register;

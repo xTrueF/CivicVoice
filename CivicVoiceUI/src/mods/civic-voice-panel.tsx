@@ -3,7 +3,18 @@ import { Scrollable } from "cs2/ui";
 import { useLocalization } from "cs2/l10n";
 import { useState, useEffect, useRef } from "react";
 
+function fmt(n: number): string {
+    if (n == null || n === 0) return "0";
+    if (n >= 1_000_000) return `${parseFloat((n / 1_000_000).toPrecision(3))}m`;
+    if (n >= 10_000) {
+        const k = parseFloat((n / 1_000).toPrecision(3));
+        return k >= 1000 ? `${parseFloat((n / 1_000_000).toPrecision(3))}m` : `${k}k`;
+    }
+    return n.toLocaleString();
+}
+
 const population$ = bindValue<number>("civicvoice", "population", 0);
+const availableSlots$ = bindValue<number>("civicvoice", "availableSlots", 7);
 const happiness$ = bindValue<number>("civicvoice", "happiness", 50);
 const unemployment$ = bindValue<number>("civicvoice", "unemployment", 5);
 const usedSlots$ = bindValue<number>("civicvoice", "usedSlots", 0);
@@ -23,6 +34,7 @@ const electionsModActive$ = bindValue<boolean>("civicvoice", "electionsModActive
 const electionsPanel$ = bindValue<any>("Elections", "panel", null);
 const termCompleted$ = bindValue<number>("civicvoice", "termCompleted", 0);
 const termFailed$ = bindValue<number>("civicvoice", "termFailed", 0);
+const termAbandoned$ = bindValue<number>("civicvoice", "termAbandoned", 0);
 const mayorTermMonths$ = bindValue<number>("civicvoice", "mayorTermMonths", 0);
 const mayorAge$ = bindValue<number>("civicvoice", "mayorAge", 0);
 const mayorTermsServed$ = bindValue<number>("civicvoice", "mayorTermsServed", 0);
@@ -155,10 +167,19 @@ function Tabs({ active, onSelect, hasElection, proposed, activeProjects, electio
     );
 }
 
-function CvButton({ color, onClick, children }: { color: "cyan" | "red"; onClick: () => void; children: any }) {
+function CvButton({ color, onClick, children, disabled }: { color: "cyan" | "red"; onClick: () => void; children: any; disabled?: boolean }) {
     const [hovered, setHovered] = useState(false);
     const c = color === "cyan" ? "75,195,212" : "224,96,96";
     const tc = color === "cyan" ? C.cyan : C.red;
+    if (disabled) return (
+        <div style={{
+            padding: "4rem 16rem", borderRadius: "4rem",
+            border: "1rem solid rgba(255,255,255,0.1)",
+            background: "rgba(255,255,255,0.05)",
+            color: "rgba(255,255,255,0.2)", fontSize: "14rem", fontWeight: 600,
+            cursor: "default", marginLeft: "8rem",
+        }}>{children}</div>
+    );
     return (
         <div
             onClick={onClick}
@@ -206,14 +227,14 @@ function useCardAnimation() {
     return { state, bannerType, visible, trigger_anim };
 }
 
-function ProposalCard({ p, onAccept, onReject, mayorSpecialty }: { p: any; onAccept: () => void; onReject: () => void; mayorSpecialty: string }) {
+function ProposalCard({ p, onAccept, onReject, mayorSpecialty, atCap }: { p: any; onAccept: () => void; onReject: () => void; mayorSpecialty: string; atCap: boolean }) {
     const { state, bannerType, visible, trigger_anim } = useCardAnimation();
     const t = useT();
     const tc = tierColor(p.tier);
     const cc = categoryColor(p.category);
-    const forText = `${p.votesFor?.toLocaleString()} ${t("CivicVoice.Proposals.Vote.For", "for")} (${p.voteShare?.toFixed(0)}%)`;
+    const forText = `${fmt(p.votesFor)} ${t("CivicVoice.Proposals.Vote.For", "for")} (${p.voteShare?.toFixed(0)}%)`;
     const againstPct = (100 - (p.voteShare || 0)).toFixed(0);
-    const againstText = `${p.votesAgainst?.toLocaleString()} ${t("CivicVoice.Proposals.Vote.Against", "against")} (${againstPct}%)`;
+    const againstText = `${fmt(p.votesAgainst)} ${t("CivicVoice.Proposals.Vote.Against", "against")} (${againstPct}%)`;
 
     if (state === "gone") return null;
 
@@ -283,7 +304,7 @@ function ProposalCard({ p, onAccept, onReject, mayorSpecialty }: { p: any; onAcc
                         </div>
                         <div style={{ display: "flex", flexDirection: "row", justifyContent: "flex-end", gap: "24rem", padding: "7rem 12rem", background: "rgba(0,0,0,0.12)", borderTop: "1rem solid rgba(255,255,255,0.04)" }}>
                             <CvButton color="red" onClick={() => trigger_anim("reject", onReject)}>{t("CivicVoice.Button.Reject", "Reject")}</CvButton>
-                            <CvButton color="cyan" onClick={() => trigger_anim("accept", onAccept)}>{t("CivicVoice.Button.Accept", "Accept")}</CvButton>
+                            <CvButton color="cyan" onClick={() => !atCap && trigger_anim("accept", onAccept)} disabled={atCap}>{t("CivicVoice.Button.Accept", "Accept")}</CvButton>
                         </div>
                     </>
                 )}
@@ -398,10 +419,15 @@ function CollapsibleSection({ label, color, children, count, open, onToggle }: {
     );
 }
 
-function ProposalsTab({ proposed, metricOpen, setMetricOpen, adhocOpen, setAdhocOpen, majorOpen, setMajorOpen, mayorSpecialty }: { proposed: any[]; metricOpen: boolean; setMetricOpen: (v: boolean) => void; adhocOpen: boolean; setAdhocOpen: (v: boolean) => void; majorOpen: boolean; setMajorOpen: (v: boolean) => void; mayorSpecialty: string }) {
+const TIER_MAX: Record<string, number> = { MetricTriggered: 3, Major: 2, AdHoc: 2 };
+
+function ProposalsTab({ proposed, active, metricOpen, setMetricOpen, adhocOpen, setAdhocOpen, majorOpen, setMajorOpen, mayorSpecialty }: { proposed: any[]; active: any[]; metricOpen: boolean; setMetricOpen: (v: boolean) => void; adhocOpen: boolean; setAdhocOpen: (v: boolean) => void; majorOpen: boolean; setMajorOpen: (v: boolean) => void; mayorSpecialty: string }) {
     const t = useT();
     if (!proposed?.length)
         return <div style={{ color: C.muted, textAlign: "center", padding: "16rem", fontSize: "16rem" }}>{t("CivicVoice.Proposals.Empty", "No proposals yet. Check back soon.")}</div>;
+
+    const activeCountByTier = (tier: string) => (active ?? []).filter((p: any) => p.tier === tier).length;
+    const atCap = (tier: string) => activeCountByTier(tier) >= (TIER_MAX[tier] ?? 99);
 
     const sortByPriority = (arr: any[]) => [...arr].sort((a, b) =>
         isMayorPriority(b.category, mayorSpecialty) ? 1 : isMayorPriority(a.category, mayorSpecialty) ? -1 : 0
@@ -413,13 +439,13 @@ function ProposalsTab({ proposed, metricOpen, setMetricOpen, adhocOpen, setAdhoc
     return (
         <div>
             {metric.length > 0 && <CollapsibleSection label={t("CivicVoice.Proposals.Section.Urgent", "Urgent issues")} color={C.red} count={metric.length} open={metricOpen} onToggle={() => setMetricOpen(!metricOpen)}>
-                {metric.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} mayorSpecialty={mayorSpecialty} />)}
+                {metric.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} mayorSpecialty={mayorSpecialty} atCap={atCap("MetricTriggered")} />)}
             </CollapsibleSection>}
             {adhoc.length > 0 && <CollapsibleSection label={t("CivicVoice.Proposals.Section.Citizen", "Citizen proposals")} color={C.cyan} count={adhoc.length} open={adhocOpen} onToggle={() => setAdhocOpen(!adhocOpen)}>
-                {adhoc.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} mayorSpecialty={mayorSpecialty} />)}
+                {adhoc.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} mayorSpecialty={mayorSpecialty} atCap={atCap("AdHoc")} />)}
             </CollapsibleSection>}
             {major.length > 0 && <CollapsibleSection label={t("CivicVoice.Proposals.Section.Major", "Major projects")} color={C.purple} count={major.length} open={majorOpen} onToggle={() => setMajorOpen(!majorOpen)}>
-                {major.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} mayorSpecialty={mayorSpecialty} />)}
+                {major.map((p: any) => <ProposalCard key={p.id} p={p} onAccept={() => trigger("civicvoice", "acceptProject", p.id)} onReject={() => trigger("civicvoice", "rejectProject", p.id)} mayorSpecialty={mayorSpecialty} atCap={atCap("Major")} />)}
             </CollapsibleSection>}
             <div style={{ height: "8rem" }} />
         </div>
@@ -451,10 +477,10 @@ function ActiveTab({ active, metricOpen, setMetricOpen, adhocOpen, setAdhocOpen,
     );
 }
 
-function ElectionTab({ election, mayorName, mayorSpecialty, mayorSlogan, termCompleted, termFailed, mayorTermMonths, mayorAge, mayorTermsServed }: { election: any; mayorName: string; mayorSpecialty: string; mayorSlogan: string; termCompleted: number; termFailed: number; mayorTermMonths: number; mayorAge: number; mayorTermsServed: number }) {
+function ElectionTab({ election, mayorName, mayorSpecialty, mayorSlogan, termCompleted, termFailed, termAbandoned, mayorTermMonths, mayorAge, mayorTermsServed }: { election: any; mayorName: string; mayorSpecialty: string; mayorSlogan: string; termCompleted: number; termFailed: number; termAbandoned: number; mayorTermMonths: number; mayorAge: number; mayorTermsServed: number }) {
     const t = useT();
     const approvalScore = Math.round(Math.min(100, Math.max(0,
-        (termCompleted * 8) - (termFailed * 12) + 50
+        (termCompleted * 8) - (termFailed * 12) - (termAbandoned * 12) + 50
     )));
     const approvalLabel = approvalScore >= 70 ? t("CivicVoice.Election.ApprovalGood", "Good") : approvalScore >= 50 ? t("CivicVoice.Election.ApprovalFair", "Fair") : t("CivicVoice.Election.ApprovalPoor", "Poor");
     const approvalColor = approvalScore >= 70 ? C.green : approvalScore >= 50 ? C.amber : C.red;
@@ -487,6 +513,7 @@ function ElectionTab({ election, mayorName, mayorSpecialty, mayorSlogan, termCom
                             {statRow(t("CivicVoice.Election.TermLength", "Term length"), `${mayorTermMonths}mo`, C.text)}
                             {statRow(t("CivicVoice.Election.ProjectsCompleted", "Projects completed"), `${termCompleted} ${t("CivicVoice.Election.ThisTerm", "this term")}`, C.green)}
                             {statRow(t("CivicVoice.Election.ProjectsFailed", "Projects failed"), `${termFailed} ${t("CivicVoice.Election.ThisTerm", "this term")}`, termFailed > 0 ? C.red : C.text)}
+                            {statRow(t("CivicVoice.Election.ProjectsAbandoned", "Projects abandoned"), `${termAbandoned} ${t("CivicVoice.Election.ThisTerm", "this term")}`, termAbandoned > 0 ? C.red : C.text)}
                         </div>
                     </>
                 )}
@@ -510,7 +537,7 @@ function ElectionTab({ election, mayorName, mayorSpecialty, mayorSlogan, termCom
             </div>
             {election.candidates?.map((c: any) => {
                 const leading = c.votes === Math.max(...election.candidates.map((x: any) => x.votes));
-                const votesText = `${c.votes?.toLocaleString()} votes (${c.voteShare?.toFixed(1)}%)`;
+                const votesText = `${fmt(c.votes)} votes (${c.voteShare?.toFixed(0)}%)`;
                 const endorseText = `${t("CivicVoice.Election.Endorse", "Endorse")} ${c.name.split(" ")[0]}`;
                 return (
                     <div key={c.name} style={{ background: C.card, borderRadius: "6rem", borderLeft: `3rem solid ${leading ? C.cyan : C.border}`, overflow: "hidden", marginBottom: "6rem" }}>
@@ -566,10 +593,10 @@ function StatsTab({ population, happiness, unemployment, votingPopulation, total
             <div style={{ background: C.card, border: `1rem solid ${C.border}`, borderRadius: "6rem", padding: "10rem 12rem", marginBottom: "6rem" }}>
                 <SectionHeader label={t("CivicVoice.Stats.Header", "City overview")} color={C.cyan} open={overviewOpen} onToggle={() => setOverviewOpen(v => !v)} />
                 {overviewOpen && <>
-                    <StatRow label={t("CivicVoice.Stats.Population", "Population")} value={population?.toLocaleString()} />
+                    <StatRow label={t("CivicVoice.Stats.Population", "Population")} value={fmt(population)} />
                     <StatRow label={t("CivicVoice.Stats.Happiness", "Happiness")} value={`${happiness?.toFixed(1)}%`} color={happiness > 70 ? C.green : happiness > 50 ? C.amber : C.red} />
                     <StatRow label={t("CivicVoice.Stats.Unemployment", "Unemployment")} value={`${unemployment?.toFixed(1)}%`} color={unemployment < 5 ? C.green : unemployment < 10 ? C.amber : C.red} />
-                    <StatRow label={t("CivicVoice.Stats.EligibleVoters", "Eligible voters")} value={votingPopulation?.toLocaleString()} />
+                    <StatRow label={t("CivicVoice.Stats.EligibleVoters", "Eligible voters")} value={fmt(votingPopulation)} />
                     <StatRow label={t("CivicVoice.Stats.Health", "Health")} value={`${health?.toFixed(0)}`} color={health > 70 ? C.green : health > 45 ? C.amber : C.red} />
                     <StatRow label={t("CivicVoice.Stats.CrimeRate", "Crime probability")} value={`${crimeRate?.toFixed(1)}%`} color={crimeRate < 30 ? C.green : crimeRate < 60 ? C.amber : C.red} />
                 </>}
@@ -827,6 +854,7 @@ export const CivicVoicePanel = () => {
     const electionsPanel = useValue(electionsPanel$);
     const termCompleted = useValue(termCompleted$);
     const termFailed = useValue(termFailed$);
+    const termAbandoned = useValue(termAbandoned$);
     const mayorTermMonths = useValue(mayorTermMonths$);
     const mayorAge = useValue(mayorAge$);
     const mayorTermsServed = useValue(mayorTermsServed$);
@@ -836,12 +864,13 @@ export const CivicVoicePanel = () => {
     const popLabel = t("CivicVoice.Footer.Pop", "Pop ");
     const happinessLabel = t("CivicVoice.Footer.Happiness", "Happiness ");
     const unemployedLabel = t("CivicVoice.Footer.Unemployed", "Unemployed ");
-    const popValue = population?.toLocaleString();
+    const popValue = fmt(population);
     const happinessValue = `${happiness?.toFixed(1)}%`;
     const unemployedValue = `${unemployment?.toFixed(1)}%`;
     const health = useValue(health$);
     const crimeRate = useValue(crimeRate$);
     const totalAbandoned = useValue(totalAbandoned$);
+    const availableSlots = useValue(availableSlots$);
 
 
     return (
@@ -884,7 +913,7 @@ export const CivicVoicePanel = () => {
             <div style={{ background: C.metaBar, padding: "8rem 14rem", borderBottom: `1rem solid ${C.border}`, display: "flex", flexDirection: "row", justifyContent: "space-between", fontSize: "14rem", color: C.muted }}>
                 <div><div>{mayorLabel}</div><div style={{ color: C.amber }}>{electionsModActive ? (electionsPanel?.mayorName || "None") : mayorName}</div></div>
                 <div><div>{electionLabel}</div><div style={{ color: C.cyan, fontWeight: 600 }}>{electionsModActive ? (electionsPanel?.electionDate || "TBD") : (nextElectionDays >= 0 ? `${nextElectionDays}mo` : "TBD")}</div></div>
-                <div><div>{activeLabel}</div><div style={{ color: C.cyan, fontWeight: 600 }}>{`${usedSlots} / 7`}</div></div>
+                <div><div>{activeLabel}</div><div style={{ color: C.cyan, fontWeight: 600 }}>{`${usedSlots} / ${usedSlots + availableSlots}`}</div></div>
             </div>
             {notifications?.length > 0 && <NotificationHistory notifications={notifications} />}
             {hasElection && tab !== "election" && !electionsModActive && (
@@ -896,9 +925,9 @@ export const CivicVoicePanel = () => {
             <Tabs active={tab} onSelect={setTab} hasElection={hasElection} proposed={proposed} activeProjects={active} electionsModActive={electionsModActive} />
             <div style={{ background: C.body }}>
                 <Scrollable style={{ maxHeight: "460rem" }}>
-                    {tab === "proposals" && <ProposalsTab proposed={proposed} metricOpen={proposalMetricOpen} setMetricOpen={setProposalMetricOpen} adhocOpen={proposalAdhocOpen} setAdhocOpen={setProposalAdhocOpen} majorOpen={proposalMajorOpen} setMajorOpen={setProposalMajorOpen} mayorSpecialty={mayorSpecialty} />}
+                    {tab === "proposals" && <ProposalsTab proposed={proposed} active={active} metricOpen={proposalMetricOpen} setMetricOpen={setProposalMetricOpen} adhocOpen={proposalAdhocOpen} setAdhocOpen={setProposalAdhocOpen} majorOpen={proposalMajorOpen} setMajorOpen={setProposalMajorOpen} mayorSpecialty={mayorSpecialty} />}
                     {tab === "active" && <ActiveTab active={active} metricOpen={activeMetricOpen} setMetricOpen={setActiveMetricOpen} adhocOpen={activeAdhocOpen} setAdhocOpen={setActiveAdhocOpen} majorOpen={activeMajorOpen} setMajorOpen={setActiveMajorOpen} mayorSpecialty={mayorSpecialty} />}
-                    {tab === "election" && !electionsModActive && <ElectionTab election={election} mayorName={mayorName} mayorSpecialty={mayorSpecialty} mayorSlogan={mayorSlogan} termCompleted={termCompleted} termFailed={termFailed} mayorTermMonths={mayorTermMonths} mayorAge={mayorAge} mayorTermsServed={mayorTermsServed} />}
+                    {tab === "election" && !electionsModActive && <ElectionTab election={election} mayorName={mayorName} mayorSpecialty={mayorSpecialty} mayorSlogan={mayorSlogan} termCompleted={termCompleted} termFailed={termFailed} termAbandoned={termAbandoned} mayorTermMonths={mayorTermMonths} mayorAge={mayorAge} mayorTermsServed={mayorTermsServed} />}
                     {tab === "election" && electionsModActive && (
                         <div style={{ padding: "20rem 14rem", color: C.muted2, fontSize: "14rem", lineHeight: 1.6, textAlign: "center" }}>
                             <div style={{ fontSize: "24rem", marginBottom: "8rem" }}>🗳️</div>

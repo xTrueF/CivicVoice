@@ -118,6 +118,7 @@ namespace CivicVoice.Models
         public string PartyName { get; set; } = string.Empty;
         public string Slogan { get; set; } = string.Empty;
         public int Votes { get; set; }
+        public float SnapshotVotePercent { get; set; }
         public int TermsServed { get; set; } = 0;
         public int BirthdayMonth { get; set; } = 1;
         public int BirthdayDay { get; set; } = 1;
@@ -134,6 +135,8 @@ namespace CivicVoice.Models
         public bool IsActive { get; set; } = true;
         public bool HasVoted { get; set; } = false;
         public int ElectionGameDay { get; set; } = 0;
+        public int SnapshotTotalVotes { get; set; }
+        public float SnapshotTurnoutPercent { get; set; }
     }
 
     [Serializable]
@@ -161,5 +164,9 @@ namespace CivicVoice.Models
         public int TotalProjectsAbandoned { get; set; } = 0;
         public DateTime MayorElectedDate { get; set; } = DateTime.MinValue;
         public DateTime LastAgeCheckDate { get; set; } = DateTime.MinValue;
+        public bool TermReviewIssued { get; set; } = false;
+        public int TermProjectsAbandoned { get; set; } = 0;
+        public List<int> RecentFillerIndices { get; set; } = new();
+        public CivicVoice.Models.NewspaperPayload? PendingNewspaper { get; set; } = null;
     }
 }
