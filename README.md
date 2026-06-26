@@ -21,7 +21,10 @@ Ambitious year-long undertakings that define your city's future. A new port, a u
 Every year your city holds a democratic election. Three candidates campaign with distinct specialties, party affiliations and slogans. The incumbent can stand for re-election for up to two terms. Endorse your preferred candidate to add your influence but the citizens decide. The winning mayor's specialty influences which proposals citizens come forward with.
 
 ### Live City Data
-All proposals and descriptions update in real time based on your city's actual metrics: population, unemployment, happiness, health, housing demand, crime probability, budget and more.
+Some proposals and descriptions update in real time based on your city's actual metrics: population, unemployment, happiness, health, housing demand, crime probability, budget and more.
+
+### Election Newspaper
+After every election, your city gets a newspaper. One of three publications appears — The Herald, The Uproar, or Civic Pulse — each with its own visual style and personality. The paper includes the election result, candidate vote shares, turnout, a winner quote, local filler stories, and a splash headline that reflects how the vote went. The simulation pauses automatically while you read.
 
 ### Toast Notifications
 Slide-in notifications appear when the panel is closed, keeping you informed of elections, completed projects and urgent citizen demands without interrupting your city building.
